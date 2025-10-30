@@ -22,8 +22,7 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "workspaceContains:**/build.gradle",
-    "workspaceContains:**/build.gradle.kts"
+    "*"
   ],
   "main": "./out/extension.js",
   "contributes": {

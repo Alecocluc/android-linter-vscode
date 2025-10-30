@@ -4,7 +4,6 @@ src/**
 .gitignore
 .eslintrc.js
 tsconfig.json
-node_modules
 *.vsix
 **/*.map
 .DS_Store
