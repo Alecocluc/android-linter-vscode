@@ -23,10 +23,6 @@ A powerful extension that brings Android Studio-like linting capabilities to Vis
 🚀 **Lightweight**: No need to run Android Studio.
 📊 **Multiple Report Formats**: Supports XML, JSON, and SARIF lint reports.
 
-## Extension Icon
-
-To add an icon to your extension, place a 128x128 PNG file named `icon.png` inside an `images` folder in your project's root directory. I have already updated the `package.json` to look for it there.
-
 ## Requirements
 
 - VS Code 1.85.0 or higher
