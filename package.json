@@ -65,10 +65,18 @@
         },
         "android-linter.showSeverity": {
           "type": "array",
-          "default": ["Error", "Warning", "Information"],
+          "default": [
+            "Error",
+            "Warning",
+            "Information"
+          ],
           "items": {
             "type": "string",
-            "enum": ["Error", "Warning", "Information"]
+            "enum": [
+              "Error",
+              "Warning",
+              "Information"
+            ]
           },
           "description": "Which severity levels to show in the Problems panel"
         },
@@ -96,9 +104,13 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && node esbuild.js",
+    "check-types": "tsc --noEmit",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && node esbuild.js --production",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
@@ -109,7 +121,9 @@
     "@types/xml2js": "^0.4.14",
     "@typescript-eslint/eslint-plugin": "^8.x",
     "@typescript-eslint/parser": "^8.x",
+    "esbuild": "^0.25.11",
     "eslint": "^9.x",
+    "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3"
   },
   "dependencies": {

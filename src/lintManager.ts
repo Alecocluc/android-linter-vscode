@@ -9,6 +9,7 @@ export class LintManager implements vscode.Disposable {
     private gradleLintRunner: GradleLintRunner;
     private runningLints: Map<string, Promise<void>> = new Map();
     private outputChannel: vscode.OutputChannel;
+    private isLinting: boolean = false;
 
     constructor(diagnosticProvider: DiagnosticProvider, outputChannel?: vscode.OutputChannel) {
         this.diagnosticProvider = diagnosticProvider;
@@ -26,11 +27,18 @@ export class LintManager implements vscode.Disposable {
     public async lintFile(document: vscode.TextDocument): Promise<void> {
         const filePath = document.uri.fsPath;
 
+        // Prevent any lint from running if one is already in progress
+        if (this.isLinting) {
+            this.log('⏸️ Lint already in progress, skipping...');
+            return;
+        }
+
         // Prevent duplicate lint runs for the same file
         if (this.runningLints.has(filePath)) {
             return this.runningLints.get(filePath);
         }
 
+        this.isLinting = true;
         const lintPromise = this.doLintFile(document);
         this.runningLints.set(filePath, lintPromise);
 
@@ -38,6 +46,7 @@ export class LintManager implements vscode.Disposable {
             await lintPromise;
         } finally {
             this.runningLints.delete(filePath);
+            this.isLinting = false;
         }
     }
 
