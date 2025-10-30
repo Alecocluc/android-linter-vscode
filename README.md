@@ -1,16 +1,31 @@
 # Android Linter for VS Code
 
-A powerful VS Code extension that brings Android Studio-like linting capabilities to Visual Studio Code. Get real-time error detection, warnings, and quick fixes for your Android Kotlin/Java projects.
+![Android Linter Banner](https://placehold.co/1280x320/000000/FFFFFF/png?text=Android%20Linter)
+
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=AlecoCluc.android-linter">
+    <img src="https://img.shields.io/visual-studio-marketplace/v/AlecoCluc.android-linter.svg?style=flat-square&label=Marketplace" alt="Marketplace">
+  </a>
+  <a href="https://github.com/Alecocluc/android-vscode/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/Alecocluc/android-vscode.svg?style=flat-square" alt="License">
+  </a>
+</p>
+
+A powerful extension that brings Android Studio-like linting capabilities to Visual Studio Code. Get real-time error detection, warnings, and quick fixes for your Android Kotlin/Java projects.
 
 ## Features
 
-✨ **Real-time Linting**: Automatically scans files when opened, saved, or edited
-🎯 **Comprehensive Diagnostics**: Shows errors, warnings, and informational messages in the Problems panel
-� **Compilation Errors**: Detects Kotlin/Java compilation errors before running lint
-�🔧 **Quick Fixes**: Right-click on issues to apply suggested fixes
-⚡ **Gradle Integration**: Uses Android's official lint tools via Gradle
-🚀 **Lightweight**: No need to run Android Studio
-📊 **Multiple Report Formats**: Supports XML, JSON, and SARIF lint reports
+✨ **Real-time Linting**: Automatically scans files when opened, saved, or edited.
+🎯 **Comprehensive Diagnostics**: Shows errors, warnings, and informational messages in the Problems panel.
+☕ **Compilation Errors**: Detects Kotlin/Java compilation errors before running lint.
+🔧 **Quick Fixes**: Right-click on issues to apply suggested fixes.
+⚡ **Gradle Integration**: Uses Android's official lint tools via Gradle.
+🚀 **Lightweight**: No need to run Android Studio.
+📊 **Multiple Report Formats**: Supports XML, JSON, and SARIF lint reports.
+
+## Extension Icon
+
+To add an icon to your extension, place a 128x128 PNG file named `icon.png` inside an `images` folder in your project's root directory. I have already updated the `package.json` to look for it there.
 
 ## Requirements
 
@@ -37,9 +52,9 @@ Use the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`):
 ### Quick Fixes
 
 When you see a warning or error:
-1. Click on the line with the issue
-2. Click the lightbulb icon (💡) or press `Ctrl+.` (or `Cmd+.` on Mac)
-3. Select a quick fix from the menu
+1. Click on the line with the issue.
+2. Click the lightbulb icon (💡) or press `Ctrl+.` (or `Cmd+.` on Mac).
+3. Select a quick fix from the menu.
 
 ## Available Quick Fixes
 
@@ -52,7 +67,7 @@ When you see a warning or error:
 
 ## Extension Settings
 
-Configure the extension through VS Code settings:
+Configure the extension through VS Code settings (`Ctrl+,`):
 
 - `android-linter.lintOnOpen`: Run lint when opening a file (default: `true`)
 - `android-linter.lintOnSave`: Run lint when saving a file (default: `true`)
@@ -65,48 +80,21 @@ Configure the extension through VS Code settings:
 
 ## How It Works
 
-1. **Detection**: The extension detects Android projects by looking for `build.gradle` or `build.gradle.kts` files
-2. **Lint Execution**: Runs `./gradlew lint --continue` (or `gradlew.bat` on Windows) in the background
-3. **Error Detection**: Parses both compilation errors and lint warnings from the Gradle output
-4. **Report Parsing**: Reads XML/JSON lint reports from `build/reports/` for detailed warnings
-5. **Display**: Shows errors and warnings in VS Code's Problems panel with proper severity levels
-6. **Quick Fixes**: Provides contextual code actions for common issues
+1. **Detection**: The extension detects Android projects by looking for `build.gradle` or `build.gradle.kts` files.
+2. **Lint Execution**: Runs `./gradlew lint --continue` (or `gradlew.bat` on Windows) in the background.
+3. **Error Detection**: Parses both compilation errors and lint warnings from the Gradle output.
+4. **Report Parsing**: Reads XML/JSON lint reports from `build/reports/` for detailed warnings.
+5. **Display**: Shows errors and warnings in VS Code's Problems panel.
+6. **Quick Fixes**: Provides contextual code actions for common issues.
 
-## Performance Tips
+## Changelog
 
-- Set `lintOnChange` to `false` for better performance (lint only on save)
-- Increase `debounceDelay` if linting feels too aggressive
-- Use `lintOnOpen: false` for large projects with many files
-
-## Troubleshooting
-
-### Gradle wrapper not found
-Make sure your project has a `gradlew` (Linux/Mac) or `gradlew.bat` (Windows) file in the workspace root.
-
-### No lint results showing
-1. Check that you're editing a file in `src/main/`, `src/test/`, or `src/androidTest/`
-2. Verify your project builds successfully with `./gradlew lint` from terminal
-3. Check the Output panel (View → Output → Android Linter) for errors
-
-### Lint is too slow
-1. Increase the `debounceDelay` setting
-2. Disable `lintOnChange`
-3. Run lint manually with the command palette
+See the [CHANGELOG.md](CHANGELOG.md) file for details on each release.
 
 ## Contributing
 
-Found a bug or want to contribute? Please open an issue or pull request on GitHub.
+Found a bug or want to contribute? Please open an issue or pull request on the [GitHub repository](https://github.com/Alecocluc/android-vscode).
 
 ## License
 
-MIT
-
-## Release Notes
-
-### 0.0.1
-
-Initial release with core features:
-- Automatic linting on file open/save
-- Quick fix suggestions
-- Gradle integration
-- XML/JSON report parsing
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

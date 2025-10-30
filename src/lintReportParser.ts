@@ -120,7 +120,7 @@ export class LintReportParser {
                 issues.push(lintIssue);
             }
         } catch (error) {
-            console.error('Failed to parse JSON lint report:', error);
+            this.log(`Failed to parse JSON lint report: ${error}`);
         }
 
         return issues;
