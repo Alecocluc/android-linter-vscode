@@ -1,0 +1,158 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import { DiagnosticProvider, LintIssue } from './diagnosticProvider';
+import { GradleLintRunner } from './gradleLintRunner';
+import { KotlinCompiler } from './kotlinCompiler';
+
+export class LintManager implements vscode.Disposable {
+    private diagnosticProvider: DiagnosticProvider;
+    private gradleLintRunner: GradleLintRunner;
+    private kotlinCompiler: KotlinCompiler;
+    private runningLints: Map<string, Promise<void>> = new Map();
+    private outputChannel: vscode.OutputChannel;
+
+    constructor(diagnosticProvider: DiagnosticProvider, outputChannel?: vscode.OutputChannel) {
+        this.diagnosticProvider = diagnosticProvider;
+        this.outputChannel = outputChannel || vscode.window.createOutputChannel('Android Linter');
+        this.gradleLintRunner = new GradleLintRunner(this.outputChannel);
+        this.kotlinCompiler = new KotlinCompiler(this.outputChannel);
+    }
+
+    public async lintFile(document: vscode.TextDocument): Promise<void> {
+        const filePath = document.uri.fsPath;
+
+        // Prevent duplicate lint runs for the same file
+        if (this.runningLints.has(filePath)) {
+            return this.runningLints.get(filePath);
+        }
+
+        const lintPromise = this.doLintFile(document);
+        this.runningLints.set(filePath, lintPromise);
+
+        try {
+            await lintPromise;
+        } finally {
+            this.runningLints.delete(filePath);
+        }
+    }
+
+    private async doLintFile(document: vscode.TextDocument): Promise<void> {
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            this.outputChannel.appendLine('⚠️ No workspace folder found for file');
+            return;
+        }
+
+        this.outputChannel.appendLine(`\n🔍 Starting lint for: ${document.fileName}`);
+        this.outputChannel.appendLine(`   Workspace: ${workspaceFolder.uri.fsPath}`);
+
+        try {
+            // Show progress
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Window,
+                    title: `Linting ${path.basename(document.fileName)}...`,
+                    cancellable: false
+                },
+                async () => {
+                    const allIssues: LintIssue[] = [];
+                    const config = vscode.workspace.getConfiguration('android-linter');
+                    const checkCompilation = config.get<boolean>('checkCompilation', true);
+                    
+                    let hasCompilationErrors = false;
+                    
+                    // 1. First, compile Kotlin code to catch compilation errors (if enabled)
+                    if (checkCompilation) {
+                        this.outputChannel.appendLine(`\n📍 Step 1: Checking for compilation errors...`);
+                        const compileErrors = await this.kotlinCompiler.compileKotlin(workspaceFolder.uri.fsPath);
+                        allIssues.push(...compileErrors);
+                        hasCompilationErrors = compileErrors.length > 0;
+                        this.outputChannel.appendLine(`   Found ${compileErrors.length} compilation error(s)`);
+                    }
+                    
+                    // 2. Then run Android Lint (only if no compilation errors or check disabled)
+                    if (!hasCompilationErrors) {
+                        this.outputChannel.appendLine(`\n📍 Step ${checkCompilation ? '2' : '1'}: Running Android Lint...`);
+                        const lintIssues = await this.gradleLintRunner.lintFile(
+                            workspaceFolder.uri.fsPath,
+                            document.uri.fsPath
+                        );
+                        allIssues.push(...lintIssues);
+                        this.outputChannel.appendLine(`   Found ${lintIssues.length} lint warning(s)`);
+                    } else {
+                        this.outputChannel.appendLine(`\n⚠️ Skipping lint check due to compilation errors`);
+                    }
+
+                    this.outputChannel.appendLine(`\n✅ Analysis completed. Total: ${allIssues.length} issue(s)`);
+                    
+                    // Clear and add all issues
+                    this.diagnosticProvider.clear();
+                    
+                    if (allIssues.length > 0) {
+                        this.outputChannel.appendLine(`📊 Adding ${allIssues.length} issues to Problems panel...`);
+                        this.diagnosticProvider.addIssues(allIssues);
+                        this.outputChannel.appendLine(`✅ Issues added to Problems panel`);
+                    }
+                }
+            );
+        } catch (error) {
+            const errorMsg = `Failed to lint file: ${error instanceof Error ? error.message : String(error)}`;
+            this.outputChannel.appendLine(`❌ ${errorMsg}`);
+            vscode.window.showErrorMessage(errorMsg);
+        }
+    }
+
+    public async lintProject(): Promise<void> {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            vscode.window.showWarningMessage('No workspace folder found');
+            return;
+        }
+
+        const workspaceFolder = workspaceFolders[0];
+
+        try {
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'Running Android Lint on entire project...',
+                    cancellable: true
+                },
+                async (progress, token) => {
+                    // Clear existing diagnostics
+                    this.diagnosticProvider.clear();
+
+                    // Run full project lint
+                    const issues = await this.gradleLintRunner.lintProject(
+                        workspaceFolder.uri.fsPath,
+                        token
+                    );
+
+                    if (token.isCancellationRequested) {
+                        return;
+                    }
+
+                    // Update diagnostics
+                    if (issues.length > 0) {
+                        this.diagnosticProvider.addIssues(issues);
+                        vscode.window.showInformationMessage(
+                            `Android Lint found ${issues.length} issue(s)`
+                        );
+                    } else {
+                        vscode.window.showInformationMessage('No lint issues found!');
+                    }
+                }
+            );
+        } catch (error) {
+            vscode.window.showErrorMessage(
+                `Failed to lint project: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
+    }
+
+    public dispose(): void {
+        this.gradleLintRunner.dispose();
+        this.kotlinCompiler.dispose();
+    }
+}

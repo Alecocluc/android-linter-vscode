@@ -1,0 +1,113 @@
+{
+  "name": "android-linter",
+  "displayName": "Android Linter",
+  "description": "Android linting and error detection for Kotlin/Java projects using Gradle",
+  "version": "0.0.1",
+  "publisher": "your-publisher-name",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/android-linter"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/build.gradle",
+    "workspaceContains:**/build.gradle.kts"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "android-linter.lintCurrentFile",
+        "title": "Android: Lint Current File"
+      },
+      {
+        "command": "android-linter.lintProject",
+        "title": "Android: Lint Entire Project"
+      },
+      {
+        "command": "android-linter.clearDiagnostics",
+        "title": "Android: Clear Lint Results"
+      }
+    ],
+    "configuration": {
+      "title": "Android Linter",
+      "properties": {
+        "android-linter.lintOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run lint when opening a file"
+        },
+        "android-linter.lintOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run lint when saving a file"
+        },
+        "android-linter.lintOnChange": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run lint when changing a file (may impact performance)"
+        },
+        "android-linter.gradlePath": {
+          "type": "string",
+          "default": "./gradlew",
+          "description": "Path to gradlew executable (relative to workspace root)"
+        },
+        "android-linter.showSeverity": {
+          "type": "array",
+          "default": ["Error", "Warning", "Information"],
+          "items": {
+            "type": "string",
+            "enum": ["Error", "Warning", "Information"]
+          },
+          "description": "Which severity levels to show in the Problems panel"
+        },
+        "android-linter.lintTimeout": {
+          "type": "number",
+          "default": 60000,
+          "description": "Timeout for lint operations in milliseconds"
+        },
+        "android-linter.debounceDelay": {
+          "type": "number",
+          "default": 2000,
+          "description": "Delay in milliseconds before running lint after changes"
+        },
+        "android-linter.enableQuickFixes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable quick fix suggestions"
+        },
+        "android-linter.checkCompilation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for Kotlin/Java compilation errors"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@types/xml2js": "^0.4.14",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "eslint": "^8.x",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "xml2js": "^0.6.2"
+  }
+}
