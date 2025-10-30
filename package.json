@@ -81,11 +81,6 @@
           "type": "boolean",
           "default": true,
           "description": "Enable quick fix suggestions"
-        },
-        "android-linter.checkCompilation": {
-          "type": "boolean",
-          "default": true,
-          "description": "Check for Kotlin/Java compilation errors"
         }
       }
     }

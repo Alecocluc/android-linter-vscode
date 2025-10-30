@@ -57,34 +57,20 @@ export class LintManager implements vscode.Disposable {
                 },
                 async () => {
                     const allIssues: LintIssue[] = [];
-                    const config = vscode.workspace.getConfiguration('android-linter');
-                    const checkCompilation = config.get<boolean>('checkCompilation', true);
                     
-                    let hasCompilationErrors = false;
+                    // Run Android Lint (which also catches compilation errors)
+                    this.outputChannel.appendLine(`\n📍 Running Android Lint and compilation check...`);
+                    const lintIssues = await this.gradleLintRunner.lintFile(
+                        workspaceFolder.uri.fsPath,
+                        document.uri.fsPath
+                    );
+                    allIssues.push(...lintIssues);
                     
-                    // 1. First, compile Kotlin code to catch compilation errors (if enabled)
-                    if (checkCompilation) {
-                        this.outputChannel.appendLine(`\n📍 Step 1: Checking for compilation errors...`);
-                        const compileErrors = await this.kotlinCompiler.compileKotlin(workspaceFolder.uri.fsPath);
-                        allIssues.push(...compileErrors);
-                        hasCompilationErrors = compileErrors.length > 0;
-                        this.outputChannel.appendLine(`   Found ${compileErrors.length} compilation error(s)`);
-                    }
+                    // Count errors vs warnings
+                    const errors = lintIssues.filter(i => i.severity === 'error');
+                    const warnings = lintIssues.filter(i => i.severity === 'warning');
                     
-                    // 2. Then run Android Lint (only if no compilation errors or check disabled)
-                    if (!hasCompilationErrors) {
-                        this.outputChannel.appendLine(`\n📍 Step ${checkCompilation ? '2' : '1'}: Running Android Lint...`);
-                        const lintIssues = await this.gradleLintRunner.lintFile(
-                            workspaceFolder.uri.fsPath,
-                            document.uri.fsPath
-                        );
-                        allIssues.push(...lintIssues);
-                        this.outputChannel.appendLine(`   Found ${lintIssues.length} lint warning(s)`);
-                    } else {
-                        this.outputChannel.appendLine(`\n⚠️ Skipping lint check due to compilation errors`);
-                    }
-
-                    this.outputChannel.appendLine(`\n✅ Analysis completed. Total: ${allIssues.length} issue(s)`);
+                    this.outputChannel.appendLine(`\n✅ Analysis completed: ${errors.length} error(s), ${warnings.length} warning(s)`);
                     
                     // Clear and add all issues
                     this.diagnosticProvider.clear();

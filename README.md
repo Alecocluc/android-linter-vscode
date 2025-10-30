@@ -62,14 +62,13 @@ Configure the extension through VS Code settings:
 - `android-linter.lintTimeout`: Timeout for lint operations in ms (default: `60000`)
 - `android-linter.debounceDelay`: Delay before running lint after changes in ms (default: `2000`)
 - `android-linter.enableQuickFixes`: Enable quick fix suggestions (default: `true`)
-- `android-linter.checkCompilation`: Check for Kotlin/Java compilation errors (default: `true`)
 
 ## How It Works
 
 1. **Detection**: The extension detects Android projects by looking for `build.gradle` or `build.gradle.kts` files
-2. **Compilation Check**: Runs `./gradlew compileDebugKotlin` to detect compilation errors
-3. **Lint Execution**: Runs `./gradlew lint` (or `gradlew.bat` on Windows) in the background
-4. **Parsing**: Parses compilation errors and XML/JSON lint reports from `build/reports/`
+2. **Lint Execution**: Runs `./gradlew lint --continue` (or `gradlew.bat` on Windows) in the background
+3. **Error Detection**: Parses both compilation errors and lint warnings from the Gradle output
+4. **Report Parsing**: Reads XML/JSON lint reports from `build/reports/` for detailed warnings
 5. **Display**: Shows errors and warnings in VS Code's Problems panel with proper severity levels
 6. **Quick Fixes**: Provides contextual code actions for common issues
 
