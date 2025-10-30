@@ -87,6 +87,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable quick fix suggestions"
+        },
+        "android-linter.verboseLogging": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable verbose logging to the output channel for debugging"
         }
       }
     }

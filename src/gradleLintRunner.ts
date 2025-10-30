@@ -17,14 +17,21 @@ export class GradleLintRunner implements vscode.Disposable {
         this.outputChannel = outputChannel || vscode.window.createOutputChannel('Android Linter');
     }
 
+    private log(message: string): void {
+        const config = vscode.workspace.getConfiguration('android-linter');
+        if (config.get<boolean>('verboseLogging', true)) {
+            this.outputChannel.appendLine(message);
+        }
+    }
+
     public async lintFile(workspaceRoot: string, filePath: string): Promise<LintIssue[]> {
         // For file-specific linting, we'll run a full lint and return ALL results
         // Android Gradle doesn't support per-file linting out of the box
         // So we run full project lint and show all issues
         const allIssues = await this.runGradleLint(workspaceRoot);
         
-        this.outputChannel.appendLine(`   📊 Found ${allIssues.length} total issues in project`);
-        this.outputChannel.appendLine(`   🎯 Returning all issues (not just for ${filePath})`);
+        this.log(`   📊 Found ${allIssues.length} total issues in project`);
+        this.log(`   🎯 Returning all issues (not just for ${filePath})`);
         
         // Return ALL issues, not just for this file
         // This matches Android Studio behavior where opening any file shows all project issues
@@ -51,20 +58,20 @@ export class GradleLintRunner implements vscode.Disposable {
         const gradleCmd = isWindows ? 'gradlew.bat' : './gradlew';
         const fullGradlePath = path.join(workspaceRoot, gradleCmd);
 
-        this.outputChannel.appendLine(`🔧 Looking for Gradle wrapper at: ${fullGradlePath}`);
+        this.log(`🔧 Looking for Gradle wrapper at: ${fullGradlePath}`);
 
         // Check if gradlew exists
         if (!fs.existsSync(fullGradlePath)) {
             const error = `Gradle wrapper not found at ${fullGradlePath}`;
-            this.outputChannel.appendLine(`❌ ${error}`);
+            this.log(`❌ ${error}`);
             throw new Error(error);
         }
 
-        this.outputChannel.appendLine(`✅ Found Gradle wrapper`);
+        this.log(`✅ Found Gradle wrapper`);
 
         // Run lint task with XML report output
         const lintCmd = `"${fullGradlePath}" lint --continue`;
-        this.outputChannel.appendLine(`⚙️ Running command: ${lintCmd}`);
+        this.log(`⚙️ Running command: ${lintCmd}`);
         
         try {
             const { stdout, stderr } = await execAsync(lintCmd, {
@@ -74,14 +81,14 @@ export class GradleLintRunner implements vscode.Disposable {
             });
 
             if (stdout) {
-                this.outputChannel.appendLine(`📤 Gradle output: ${stdout.substring(0, 500)}`);
+                this.log(`📤 Gradle output: ${stdout.substring(0, 500)}`);
             }
             if (stderr) {
-                this.outputChannel.appendLine(`⚠️ Gradle stderr: ${stderr.substring(0, 500)}`);
+                this.log(`⚠️ Gradle stderr: ${stderr.substring(0, 500)}`);
             }
 
             if (cancellationToken?.isCancellationRequested) {
-                this.outputChannel.appendLine(`🛑 Lint cancelled`);
+                this.log(`🛑 Lint cancelled`);
                 return [];
             }
 
@@ -90,15 +97,15 @@ export class GradleLintRunner implements vscode.Disposable {
         } catch (error: any) {
             // Lint command may exit with non-zero even when successful
             // if it finds issues, so we still try to parse results
-            this.outputChannel.appendLine(`⚠️ Gradle command exited with error (this is normal if lint found issues)`);
-            this.outputChannel.appendLine(`   Error: ${error.message}`);
+            this.log(`⚠️ Gradle command exited with error (this is normal if lint found issues)`);
+            this.log(`   Error: ${error.message}`);
             
             // Check if there are compilation errors in the output
             const errorOutput = (error.stdout || '') + '\n' + (error.stderr || '');
             const compilationErrors = this.parseCompilationErrors(errorOutput, workspaceRoot);
             
             if (compilationErrors.length > 0) {
-                this.outputChannel.appendLine(`🔴 Found ${compilationErrors.length} compilation errors in lint output`);
+                this.log(`🔴 Found ${compilationErrors.length} compilation errors in lint output`);
                 return compilationErrors;
             }
             
@@ -120,21 +127,21 @@ export class GradleLintRunner implements vscode.Disposable {
             path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results-debug.xml'),
         ];
 
-        this.outputChannel.appendLine(`🔍 Looking for lint reports...`);
+        this.log(`🔍 Looking for lint reports...`);
 
         // Try to find and parse the first available report
         for (const reportPath of possibleReportPaths) {
-            this.outputChannel.appendLine(`   Checking: ${reportPath}`);
+            this.log(`   Checking: ${reportPath}`);
             if (fs.existsSync(reportPath)) {
-                this.outputChannel.appendLine(`   ✅ Found XML report: ${reportPath}`);
+                this.log(`   ✅ Found XML report: ${reportPath}`);
                 const xmlContent = fs.readFileSync(reportPath, 'utf-8');
-                this.outputChannel.appendLine(`   📄 Report size: ${xmlContent.length} bytes`);
+                this.log(`   📄 Report size: ${xmlContent.length} bytes`);
                 
                 // Log first 500 chars of XML to debug
-                this.outputChannel.appendLine(`   📋 XML preview: ${xmlContent.substring(0, 500)}...`);
+                this.log(`   📋 XML preview: ${xmlContent.substring(0, 500)}...`);
                 
                 const parsedIssues = await this.parser.parseXmlReport(xmlContent, workspaceRoot);
-                this.outputChannel.appendLine(`   🎯 Parser returned ${parsedIssues.length} issues`);
+                this.log(`   🎯 Parser returned ${parsedIssues.length} issues`);
                 
                 return parsedIssues;
             }
@@ -142,15 +149,15 @@ export class GradleLintRunner implements vscode.Disposable {
 
         // If no XML report found, check for JSON or SARIF
         const jsonReportPath = path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results.json');
-        this.outputChannel.appendLine(`   Checking: ${jsonReportPath}`);
+        this.log(`   Checking: ${jsonReportPath}`);
         if (fs.existsSync(jsonReportPath)) {
-            this.outputChannel.appendLine(`   ✅ Found JSON report: ${jsonReportPath}`);
+            this.log(`   ✅ Found JSON report: ${jsonReportPath}`);
             const jsonContent = fs.readFileSync(jsonReportPath, 'utf-8');
             return this.parser.parseJsonReport(jsonContent, workspaceRoot);
         }
 
         // No reports found
-        this.outputChannel.appendLine(`   ❌ No lint reports found`);
+        this.log(`   ❌ No lint reports found`);
         return [];
     }
 
@@ -182,7 +189,7 @@ export class GradleLintRunner implements vscode.Disposable {
             };
             
             issues.push(issue);
-            this.outputChannel.appendLine(`   🔴 ${severity === 'e' ? 'Error' : 'Warning'}: ${path.basename(localPath)}:${line} - ${message.substring(0, 80)}`);
+            this.log(`   🔴 ${severity === 'e' ? 'Error' : 'Warning'}: ${path.basename(localPath)}:${line} - ${message.substring(0, 80)}`);
         }
         
         return issues;

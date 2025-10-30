@@ -16,6 +16,13 @@ export class LintManager implements vscode.Disposable {
         this.gradleLintRunner = new GradleLintRunner(this.outputChannel);
     }
 
+    private log(message: string): void {
+        const config = vscode.workspace.getConfiguration('android-linter');
+        if (config.get<boolean>('verboseLogging', true)) {
+            this.outputChannel.appendLine(message);
+        }
+    }
+
     public async lintFile(document: vscode.TextDocument): Promise<void> {
         const filePath = document.uri.fsPath;
 
@@ -37,12 +44,12 @@ export class LintManager implements vscode.Disposable {
     private async doLintFile(document: vscode.TextDocument): Promise<void> {
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
         if (!workspaceFolder) {
-            this.outputChannel.appendLine('⚠️ No workspace folder found for file');
+            this.log('⚠️ No workspace folder found for file');
             return;
         }
 
-        this.outputChannel.appendLine(`\n🔍 Starting lint for: ${document.fileName}`);
-        this.outputChannel.appendLine(`   Workspace: ${workspaceFolder.uri.fsPath}`);
+        this.log(`\n🔍 Starting lint for: ${document.fileName}`);
+        this.log(`   Workspace: ${workspaceFolder.uri.fsPath}`);
 
         try {
             // Show progress
@@ -56,7 +63,7 @@ export class LintManager implements vscode.Disposable {
                     const allIssues: LintIssue[] = [];
                     
                     // Run Android Lint (which also catches compilation errors)
-                    this.outputChannel.appendLine(`\n📍 Running Android Lint and compilation check...`);
+                    this.log(`\n📍 Running Android Lint and compilation check...`);
                     const lintIssues = await this.gradleLintRunner.lintFile(
                         workspaceFolder.uri.fsPath,
                         document.uri.fsPath
@@ -67,21 +74,21 @@ export class LintManager implements vscode.Disposable {
                     const errors = lintIssues.filter(i => i.severity === 'error');
                     const warnings = lintIssues.filter(i => i.severity === 'warning');
                     
-                    this.outputChannel.appendLine(`\n✅ Analysis completed: ${errors.length} error(s), ${warnings.length} warning(s)`);
+                    this.log(`\n✅ Analysis completed: ${errors.length} error(s), ${warnings.length} warning(s)`);
                     
                     // Clear and add all issues
                     this.diagnosticProvider.clear();
                     
                     if (allIssues.length > 0) {
-                        this.outputChannel.appendLine(`📊 Adding ${allIssues.length} issues to Problems panel...`);
+                        this.log(`📊 Adding ${allIssues.length} issues to Problems panel...`);
                         this.diagnosticProvider.addIssues(allIssues);
-                        this.outputChannel.appendLine(`✅ Issues added to Problems panel`);
+                        this.log(`✅ Issues added to Problems panel`);
                     }
                 }
             );
         } catch (error) {
             const errorMsg = `Failed to lint file: ${error instanceof Error ? error.message : String(error)}`;
-            this.outputChannel.appendLine(`❌ ${errorMsg}`);
+            this.log(`❌ ${errorMsg}`);
             vscode.window.showErrorMessage(errorMsg);
         }
     }

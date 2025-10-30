@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseStringPromise } from 'xml2js';
 import { LintIssue, QuickFix } from './diagnosticProvider';
@@ -10,10 +11,14 @@ export class LintReportParser {
     }
 
     private log(message: string) {
-        if (this.outputChannel) {
+        if (!this.outputChannel) {
+            return;
+        }
+
+        const config = vscode.workspace.getConfiguration('android-linter');
+        if (config.get<boolean>('verboseLogging', true)) {
             this.outputChannel.appendLine(`   [Parser] ${message}`);
         }
-        console.log(`[Parser] ${message}`);
     }
     public async parseXmlReport(xmlContent: string, workspaceRoot: string): Promise<LintIssue[]> {
         const issues: LintIssue[] = [];

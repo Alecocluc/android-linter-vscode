@@ -10,13 +10,20 @@ let diagnosticProvider: DiagnosticProvider;
 
 function log(outputChannel: vscode.OutputChannel, message: string) {
     const config = vscode.workspace.getConfiguration('android-linter');
-    if (config.get<boolean>('verboseLogging')) {
+    if (config.get<boolean>('verboseLogging', true)) {
         outputChannel.appendLine(message);
     }
 }
 
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Android Linter');
+    
+    // Show the output channel so it appears in the dropdown
+    const extensionConfig = vscode.workspace.getConfiguration('android-linter');
+    if (extensionConfig.get<boolean>('verboseLogging', true)) {
+        outputChannel.show(true); // true = preserve focus on editor
+    }
+    
     outputChannel.appendLine('🚀 Android Linter extension is now active');
 
     // Initialize diagnostic collection
