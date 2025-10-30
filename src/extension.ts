@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { LintManager } from './lintManager';
 import { DiagnosticProvider } from './diagnosticProvider';
 import { CodeActionProvider } from './codeActionProvider';
@@ -6,10 +8,16 @@ import { CodeActionProvider } from './codeActionProvider';
 let lintManager: LintManager;
 let diagnosticProvider: DiagnosticProvider;
 
+function log(outputChannel: vscode.OutputChannel, message: string) {
+    const config = vscode.workspace.getConfiguration('android-linter');
+    if (config.get<boolean>('verboseLogging')) {
+        outputChannel.appendLine(message);
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('Android Linter');
     outputChannel.appendLine('🚀 Android Linter extension is now active');
-    console.log('Android Linter extension is now active');
 
     // Initialize diagnostic collection
     diagnosticProvider = new DiagnosticProvider();
@@ -21,9 +29,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Log workspace info
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders) {
-        outputChannel.appendLine(`📁 Workspace folders: ${workspaceFolders.map(f => f.uri.fsPath).join(', ')}`);
+        log(outputChannel, `📁 Workspace folders: ${workspaceFolders.map(f => f.uri.fsPath).join(', ')}`);
     } else {
-        outputChannel.appendLine('⚠️ No workspace folder found');
+        log(outputChannel, '⚠️ No workspace folder found');
     }
 
     // Register commands
@@ -55,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
     const codeActionProvider = new CodeActionProvider();
     context.subscriptions.push(
         vscode.languages.registerCodeActionsProvider(
-            ['kotlin', 'java'],
+            ['kotlin', 'java', 'xml'],
             codeActionProvider,
             {
                 providedCodeActionKinds: CodeActionProvider.providedCodeActionKinds
@@ -66,12 +74,10 @@ export function activate(context: vscode.ExtensionContext) {
     // Listen to file open events
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(async (document) => {
-            outputChannel.appendLine(`📄 File opened: ${document.fileName} (language: ${document.languageId})`);
+            log(outputChannel, `📄 File opened: ${document.fileName} (language: ${document.languageId})`);
             const config = vscode.workspace.getConfiguration('android-linter');
-            const isAndroid = isAndroidFile(document);
-            outputChannel.appendLine(`   Is Android file: ${isAndroid}`);
-            if (config.get<boolean>('lintOnOpen') && isAndroid) {
-                outputChannel.appendLine(`   ▶️ Running lint on ${document.fileName}`);
+            if (config.get<boolean>('lintOnOpen') && isAndroidFile(document)) {
+                log(outputChannel, `   ▶️ Running lint on ${document.fileName}`);
                 await lintManager.lintFile(document);
             }
         })
@@ -124,21 +130,25 @@ export function deactivate() {
 }
 
 function isAndroidFile(document: vscode.TextDocument): boolean {
-    // Check if file is Kotlin or Java
-    if (document.languageId !== 'kotlin' && document.languageId !== 'java') {
-        console.log(`❌ Not Android file: wrong language (${document.languageId})`);
+    const validLanguages = ['kotlin', 'java', 'xml'];
+    if (!validLanguages.includes(document.languageId)) {
         return false;
     }
 
-    // Check if we're in an Android project (has build.gradle or build.gradle.kts)
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
     if (!workspaceFolder) {
-        console.log(`❌ Not Android file: no workspace folder`);
         return false;
     }
 
-    // For now, accept any Kotlin/Java file in workspace with build.gradle
-    // This is more permissive and will let the lint tool decide what's valid
-    console.log(`✅ Is Android file: ${document.languageId} file in workspace`);
-    return true;
+    const workspaceRoot = workspaceFolder.uri.fsPath;
+    const hasGradle = fs.existsSync(path.join(workspaceRoot, 'build.gradle')) || fs.existsSync(path.join(workspaceRoot, 'build.gradle.kts'));
+    
+    if (hasGradle) {
+        return true;
+    }
+    
+    // Check app level build.gradle
+    const appLevelGradle = fs.existsSync(path.join(workspaceRoot, 'app', 'build.gradle')) || fs.existsSync(path.join(workspaceRoot, 'app', 'build.gradle.kts'));
+
+    return appLevelGradle;
 }

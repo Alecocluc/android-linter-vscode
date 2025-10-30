@@ -41,6 +41,7 @@ export class DiagnosticProvider implements vscode.Disposable {
         issuesByFile.forEach((fileIssues, file) => {
             const uri = vscode.Uri.file(file);
             const diagnostics: vscode.Diagnostic[] = [];
+            const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === file);
 
             for (const issue of fileIssues) {
                 if (!this.shouldShowSeverity(issue.severity)) {
@@ -49,12 +50,18 @@ export class DiagnosticProvider implements vscode.Disposable {
 
                 const line = Math.max(0, issue.line - 1); // VS Code is 0-indexed
                 const column = Math.max(0, issue.column - 1);
-                const range = new vscode.Range(
-                    line,
-                    column,
-                    line,
-                    column + 1
-                );
+                let range = new vscode.Range(line, column, line, column + 1);
+
+                if (doc) {
+                    const lineText = doc.lineAt(line).text;
+                    const wordRange = doc.getWordRangeAtPosition(new vscode.Position(line, column));
+                    if (wordRange) {
+                        range = wordRange;
+                    } else {
+                        // Fallback for when no word is at the position, e.g., for a whole line issue
+                        range = new vscode.Range(line, 0, line, lineText.length);
+                    }
+                }
 
                 const diagnostic = new vscode.Diagnostic(
                     range,
@@ -89,34 +96,30 @@ export class DiagnosticProvider implements vscode.Disposable {
     }
 
     private getSeverity(severity: string): vscode.DiagnosticSeverity {
-        switch (severity.toLowerCase()) {
-            case 'error':
-            case 'fatal':
-                return vscode.DiagnosticSeverity.Error;
-            case 'warning':
-                return vscode.DiagnosticSeverity.Warning;
-            case 'information':
-            case 'informational':
-                return vscode.DiagnosticSeverity.Information;
-            default:
-                return vscode.DiagnosticSeverity.Hint;
-        }
+        const severityMap: Record<string, vscode.DiagnosticSeverity> = {
+            error: vscode.DiagnosticSeverity.Error,
+            fatal: vscode.DiagnosticSeverity.Error,
+            warning: vscode.DiagnosticSeverity.Warning,
+            information: vscode.DiagnosticSeverity.Information,
+            informational: vscode.DiagnosticSeverity.Information,
+        };
+        return severityMap[severity.toLowerCase()] ?? vscode.DiagnosticSeverity.Hint;
     }
 
     private shouldShowSeverity(severity: string): boolean {
         const config = vscode.workspace.getConfiguration('android-linter');
-        const showSeverity = config.get<string[]>('showSeverity') || ['Error', 'Warning', 'Information'];
-        
+        const showSeverity = new Set(config.get<string[]>('showSeverity') || ['Error', 'Warning', 'Information']);
+
         const severityMap: Record<string, string> = {
-            'error': 'Error',
-            'fatal': 'Error',
-            'warning': 'Warning',
-            'information': 'Information',
-            'informational': 'Information'
+            error: 'Error',
+            fatal: 'Error',
+            warning: 'Warning',
+            information: 'Information',
+            informational: 'Information',
         };
 
         const mappedSeverity = severityMap[severity.toLowerCase()] || 'Information';
-        return showSeverity.includes(mappedSeverity);
+        return showSeverity.has(mappedSeverity);
     }
 
     public dispose(): void {

@@ -57,11 +57,13 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
                 actions.push(this.createRemoveLineAction(document, diagnostic, 'Remove obsolete parameter'));
                 break;
             case 'UseCompoundDrawables':
-                actions.push(this.createInfoAction(diagnostic, 'Use compound drawable (android:drawableTop/Bottom/Left/Right)'));
+                actions.push(this.createInfoAction(diagnostic, issueId, 'Use compound drawable (android:drawableTop/Bottom/Left/Right)'));
                 break;
             default:
                 // Generic suppress lint action
-                actions.push(this.createSuppressLintAction(document, diagnostic, issueId));
+                if (issueId) {
+                    actions.push(this.createSuppressLintAction(document, diagnostic, issueId));
+                }
         }
 
         return actions;
@@ -102,11 +104,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
 
         const edit = new vscode.WorkspaceEdit();
         const line = document.lineAt(diagnostic.range.start.line);
-        const lineRange = new vscode.Range(
-            line.range.start,
-            line.range.start.translate(1, 0)
-        );
-        edit.delete(document.uri, lineRange);
+        edit.delete(document.uri, line.rangeIncludingLineBreak);
         action.edit = edit;
 
         return action;
@@ -133,7 +131,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         edit.insert(
             document.uri,
             insertPosition,
-            `\n${indentation}    android:contentDescription="@string/description"`
+            `\n${indentation}    android:contentDescription=""`
         );
         action.edit = edit;
 
@@ -155,11 +153,11 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         const line = document.lineAt(diagnostic.range.start.line);
         const lineText = line.text;
         
-        let newText = lineText;
-        newText = newText.replace(/android:layout_marginLeft/g, 'android:layout_marginStart');
-        newText = newText.replace(/android:layout_marginRight/g, 'android:layout_marginEnd');
-        newText = newText.replace(/android:paddingLeft/g, 'android:paddingStart');
-        newText = newText.replace(/android:paddingRight/g, 'android:paddingEnd');
+        const newText = lineText
+            .replace(/android:layout_marginLeft/g, 'android:layout_marginStart')
+            .replace(/android:layout_marginRight/g, 'android:layout_marginEnd')
+            .replace(/android:paddingLeft/g, 'android:paddingStart')
+            .replace(/android:paddingRight/g, 'android:paddingEnd');
 
         edit.replace(document.uri, line.range, newText);
         action.edit = edit;
@@ -172,6 +170,15 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         diagnostic: vscode.Diagnostic,
         issueId: string
     ): vscode.CodeAction {
+        if (document.languageId === 'xml') {
+            const action = new vscode.CodeAction(
+                `💡 Suppress with tools:ignore="${issueId}"`,
+                vscode.CodeActionKind.Empty
+            );
+            action.diagnostics = [diagnostic];
+            return action;
+        }
+
         const action = new vscode.CodeAction(
             `🔇 Suppress "${issueId}" for this line`,
             vscode.CodeActionKind.QuickFix
@@ -196,7 +203,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         return action;
     }
 
-    private createInfoAction(diagnostic: vscode.Diagnostic, message: string): vscode.CodeAction {
+    private createInfoAction(diagnostic: vscode.Diagnostic, issueId: string, message: string): vscode.CodeAction {
         const action = new vscode.CodeAction(
             `💡 ${message}`,
             vscode.CodeActionKind.QuickFix
@@ -206,7 +213,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         action.command = {
             command: 'vscode.open',
             title: 'Show Documentation',
-            arguments: [`https://developer.android.com/guide`]
+            arguments: [`https://developer.android.com/s/results?q=${issueId}`]
         };
 
         return action;

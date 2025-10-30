@@ -3,12 +3,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DiagnosticProvider, LintIssue } from './diagnosticProvider';
 import { GradleLintRunner } from './gradleLintRunner';
-import { KotlinCompiler } from './kotlinCompiler';
 
 export class LintManager implements vscode.Disposable {
     private diagnosticProvider: DiagnosticProvider;
     private gradleLintRunner: GradleLintRunner;
-    private kotlinCompiler: KotlinCompiler;
     private runningLints: Map<string, Promise<void>> = new Map();
     private outputChannel: vscode.OutputChannel;
 
@@ -16,7 +14,6 @@ export class LintManager implements vscode.Disposable {
         this.diagnosticProvider = diagnosticProvider;
         this.outputChannel = outputChannel || vscode.window.createOutputChannel('Android Linter');
         this.gradleLintRunner = new GradleLintRunner(this.outputChannel);
-        this.kotlinCompiler = new KotlinCompiler(this.outputChannel);
     }
 
     public async lintFile(document: vscode.TextDocument): Promise<void> {
@@ -139,6 +136,5 @@ export class LintManager implements vscode.Disposable {
 
     public dispose(): void {
         this.gradleLintRunner.dispose();
-        this.kotlinCompiler.dispose();
     }
 }
