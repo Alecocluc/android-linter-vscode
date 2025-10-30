@@ -22,6 +22,7 @@ export class LintReportParser {
     }
     public async parseXmlReport(xmlContent: string, workspaceRoot: string): Promise<LintIssue[]> {
         const issues: LintIssue[] = [];
+        const seenIssues = new Set<string>(); // Track unique issues
 
         try {
             this.log(`Starting XML parsing...`);
@@ -57,6 +58,7 @@ export class LintReportParser {
                     continue;
                 }
 
+                // Only use the first location to avoid duplicates
                 const location = Array.isArray(locations) ? locations[0] : locations;
                 const attrs = location.$;
 
@@ -68,6 +70,15 @@ export class LintReportParser {
                 const filePath = path.isAbsolute(attrs.file) 
                     ? attrs.file 
                     : path.join(workspaceRoot, attrs.file);
+
+                // Create unique key for deduplication: file:line:column:id:message
+                const uniqueKey = `${filePath}:${attrs.line || '1'}:${attrs.column || '1'}:${issue.$.id}:${issue.$.message}`;
+                
+                if (seenIssues.has(uniqueKey)) {
+                    this.log(`Issue ${i + 1} is a duplicate, skipping`);
+                    continue;
+                }
+                seenIssues.add(uniqueKey);
 
                 const lintIssue: LintIssue = {
                     file: filePath,
