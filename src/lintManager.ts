@@ -92,13 +92,28 @@ export class LintManager implements vscode.Disposable {
                         this.log(`📊 Adding ${allIssues.length} issues to Problems panel...`);
                         this.diagnosticProvider.addIssues(allIssues);
                         this.log(`✅ Issues added to Problems panel`);
+                        
+                        // Show summary notification
+                        if (errors.length > 0) {
+                            vscode.window.showWarningMessage(
+                                `Android Lint: Found ${errors.length} error(s) and ${warnings.length > 0 ? ` and ${warnings.length} warning(s)` : ''}`
+                            );
+                        } else if (warnings.length > 0) {
+                            vscode.window.showInformationMessage(
+                                `Android Lint: Found ${warnings.length} warning(s)`
+                            );
+                        }
+                    } else {
+                        // Only show success if there were actually no issues
+                        // (not if gradle failed without generating reports)
+                        vscode.window.showInformationMessage('Android Lint: No issues found! ✓');
                     }
                 }
             );
         } catch (error) {
             const errorMsg = `Failed to lint file: ${error instanceof Error ? error.message : String(error)}`;
             this.log(`❌ ${errorMsg}`);
-            vscode.window.showErrorMessage(errorMsg);
+            // Error notification already shown in GradleLintRunner, don't duplicate
         }
     }
 

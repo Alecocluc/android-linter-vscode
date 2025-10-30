@@ -64,6 +64,7 @@ export class GradleLintRunner implements vscode.Disposable {
         if (!fs.existsSync(fullGradlePath)) {
             const error = `Gradle wrapper not found at ${fullGradlePath}`;
             this.log(`❌ ${error}`);
+            vscode.window.showErrorMessage(`Android Linter: ${error}. Make sure you're in an Android project.`);
             throw new Error(error);
         }
 
@@ -102,6 +103,31 @@ export class GradleLintRunner implements vscode.Disposable {
             
             // Check if there are compilation errors in the output
             const errorOutput = (error.stdout || '') + '\n' + (error.stderr || '');
+            
+            // Check for common Gradle setup errors
+            if (errorOutput.includes('SDK location not found') || errorOutput.includes('ANDROID_HOME')) {
+                const errorMsg = 'Android SDK not found. Please set ANDROID_HOME or configure local.properties';
+                this.log(`❌ ${errorMsg}`);
+                vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
+                throw new Error(errorMsg);
+            }
+            
+            if (errorOutput.includes('Failed to install the following SDK components')) {
+                const sdkMatch = errorOutput.match(/platforms;android-(\d+)/);
+                const version = sdkMatch ? sdkMatch[1] : 'unknown';
+                const errorMsg = `Missing Android SDK Platform ${version}. Install it using Android Studio SDK Manager.`;
+                this.log(`❌ ${errorMsg}`);
+                vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
+                throw new Error(errorMsg);
+            }
+            
+            if (errorOutput.includes('Could not resolve') || errorOutput.includes('Could not download')) {
+                const errorMsg = 'Gradle dependency resolution failed. Check your internet connection and gradle configuration.';
+                this.log(`❌ ${errorMsg}`);
+                vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
+                throw new Error(errorMsg);
+            }
+            
             const compilationErrors = this.parseCompilationErrors(errorOutput, workspaceRoot);
             
             if (compilationErrors.length > 0) {
@@ -110,11 +136,22 @@ export class GradleLintRunner implements vscode.Disposable {
             }
             
             try {
-                return await this.parseLintResults(workspaceRoot);
+                const results = await this.parseLintResults(workspaceRoot);
+                
+                // If no results found but gradle failed, it's an actual error
+                if (results.length === 0 && error.code !== 0) {
+                    const errorMsg = 'Gradle lint failed without generating reports. Check the Output panel for details.';
+                    this.log(`❌ ${errorMsg}`);
+                    this.log(`   Full error: ${errorOutput.substring(0, 1000)}`);
+                    vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
+                    throw new Error(errorMsg);
+                }
+                
+                return results;
             } catch (parseError) {
-                throw new Error(
-                    `Lint execution failed: ${error.message || String(error)}`
-                );
+                const errorMsg = `Lint execution failed: ${error.message || String(error)}`;
+                vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
+                throw new Error(errorMsg);
             }
         }
     }
