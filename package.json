@@ -26,6 +26,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "android-explorer",
+          "title": "Android",
+          "icon": "images/android-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "android-explorer": [
+        {
+          "id": "androidExplorer",
+          "name": "Android Explorer",
+          "icon": "images/android-icon.svg"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "android-linter.lintCurrentFile",
@@ -50,8 +68,30 @@
       {
         "command": "android-linter.stopLogcat",
         "title": "Android: Stop Logcat"
+      },
+      {
+        "command": "android-linter.refreshDevices",
+        "title": "Android: Refresh Devices",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "android-linter.selectDevice",
+        "title": "Android: Select Device"
+      },
+      {
+        "command": "android-linter.clearLogcat",
+        "title": "Android: Clear Logcat"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "android-linter.refreshDevices",
+          "when": "view == androidExplorer",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Android Linter",
       "properties": {
@@ -209,6 +249,26 @@
           "type": "number",
           "default": 0,
           "description": "Limit Gradle max workers (0 uses Gradle default)"
+        },
+        "android-linter.logcatUseWebview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use enhanced WebView panel for logcat (false to use plain output channel)"
+        },
+        "android-linter.logcatMaxBufferSize": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum number of log entries to keep in memory"
+        },
+        "android-linter.logcatAutoScroll": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scroll to newest logs"
+        },
+        "android-linter.showStatusBar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show 'Run on Android' button in status bar (now available in Android Explorer panel)"
         }
       }
     }

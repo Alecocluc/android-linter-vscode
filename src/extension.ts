@@ -8,6 +8,7 @@ import { GradleProcessManager } from './gradleProcessManager';
 import { AndroidDeviceManager } from './androidDeviceManager';
 import { LogcatManager } from './logcatManager';
 import { AndroidAppLauncher } from './androidLauncher';
+import { AndroidExplorerView } from './androidExplorerView';
 
 let lintManager: LintManager;
 let diagnosticProvider: DiagnosticProvider;
@@ -15,6 +16,7 @@ let gradleProcessManager: GradleProcessManager;
 let deviceManager: AndroidDeviceManager;
 let logcatManager: LogcatManager;
 let appLauncher: AndroidAppLauncher;
+let androidExplorerView: AndroidExplorerView;
 let runStatusBarItem: vscode.StatusBarItem;
 
 function log(outputChannel: vscode.OutputChannel, message: string) {
@@ -45,11 +47,27 @@ export function activate(context: vscode.ExtensionContext) {
     deviceManager = new AndroidDeviceManager(outputChannel);
     context.subscriptions.push(deviceManager);
 
-    logcatManager = new LogcatManager(deviceManager);
+    logcatManager = new LogcatManager(deviceManager, context.extensionUri);
     context.subscriptions.push(logcatManager);
 
     appLauncher = new AndroidAppLauncher(gradleProcessManager, deviceManager, logcatManager, outputChannel);
     context.subscriptions.push(appLauncher);
+
+    // Initialize Android Explorer View
+    androidExplorerView = new AndroidExplorerView(deviceManager, logcatManager, gradleProcessManager, context);
+    context.subscriptions.push(
+        vscode.window.registerTreeDataProvider('androidExplorer', androidExplorerView)
+    );
+
+    // Connect app launcher to explorer view for status updates
+    appLauncher.setAppIdCallback((appId) => {
+        androidExplorerView.setCurrentAppId(appId);
+    });
+
+    // Refresh devices on startup
+    androidExplorerView.refreshDevices().catch(err => {
+        log(outputChannel, `Failed to refresh devices on startup: ${err}`);
+    });
 
     // Initialize lint manager
     lintManager = new LintManager(diagnosticProvider, gradleProcessManager, outputChannel);
@@ -89,28 +107,60 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('android-linter.launchOnDevice', async () => {
-            await appLauncher.launch();
+            androidExplorerView.setGradleRunning(true);
+            try {
+                await appLauncher.launch();
+            } finally {
+                androidExplorerView.setGradleRunning(false);
+            }
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('android-linter.showLogcat', async () => {
             await appLauncher.startLogcatSession();
+            androidExplorerView.setLogcatRunning(true);
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('android-linter.stopLogcat', async () => {
             await appLauncher.stopLogcat();
+            androidExplorerView.setLogcatRunning(false);
         })
     );
 
-    runStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    runStatusBarItem.text = '$(debug-start) Run on Android';
-    runStatusBarItem.tooltip = 'Install Debug build and launch on a connected device';
-    runStatusBarItem.command = 'android-linter.launchOnDevice';
-    runStatusBarItem.show();
-    context.subscriptions.push(runStatusBarItem);
+    // Register Android Explorer commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.refreshDevices', async () => {
+            await androidExplorerView.refreshDevices();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.selectDevice', async (device) => {
+            androidExplorerView.setSelectedDevice(device);
+            vscode.window.showInformationMessage(`Selected device: ${device.label}`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.clearLogcat', () => {
+            logcatManager.clearWebview();
+            vscode.window.showInformationMessage('Logcat cleared');
+        })
+    );
+
+    // Optional status bar item (now we have the Android Explorer panel)
+    const showStatusBar = vscode.workspace.getConfiguration('android-linter').get<boolean>('showStatusBar', false);
+    if (showStatusBar) {
+        runStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        runStatusBarItem.text = '$(debug-start) Run on Android';
+        runStatusBarItem.tooltip = 'Install Debug build and launch on a connected device';
+        runStatusBarItem.command = 'android-linter.launchOnDevice';
+        runStatusBarItem.show();
+        context.subscriptions.push(runStatusBarItem);
+    }
 
     // Register code action provider for quick fixes
     const codeActionProvider = new CodeActionProvider();

@@ -10,6 +10,7 @@ export class AndroidAppLauncher implements vscode.Disposable {
     private readonly logcatManager: LogcatManager;
     private readonly outputChannel: vscode.OutputChannel;
     private lastDeviceId?: string;
+    private onAppIdDetected?: (appId: string) => void;
 
     constructor(
         gradleManager: GradleProcessManager,
@@ -21,6 +22,10 @@ export class AndroidAppLauncher implements vscode.Disposable {
         this.deviceManager = deviceManager;
         this.logcatManager = logcatManager;
         this.outputChannel = outputChannel;
+    }
+
+    public setAppIdCallback(callback: (appId: string) => void): void {
+        this.onAppIdDetected = callback;
     }
 
     public async launch(): Promise<void> {
@@ -47,6 +52,11 @@ export class AndroidAppLauncher implements vscode.Disposable {
         if (!applicationId) {
             vscode.window.showWarningMessage('Android Linter: Unable to determine applicationId. Set android-linter.launchApplicationId in settings.');
             return;
+        }
+
+        // Notify callback of detected app ID
+        if (this.onAppIdDetected) {
+            this.onAppIdDetected(applicationId);
         }
 
         const config = vscode.workspace.getConfiguration('android-linter');
@@ -152,6 +162,11 @@ export class AndroidAppLauncher implements vscode.Disposable {
         this.lastDeviceId = selectedDevice.id;
 
         const applicationId = await this.resolveApplicationId(workspaceFolder.uri.fsPath);
+
+        // Notify callback of detected app ID
+        if (applicationId && this.onAppIdDetected) {
+            this.onAppIdDetected(applicationId);
+        }
 
         await this.logcatManager.start(selectedDevice.id, applicationId);
     }

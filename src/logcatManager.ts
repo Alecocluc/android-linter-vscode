@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import { AndroidDeviceManager } from './androidDeviceManager';
+import { LogcatWebviewPanel } from './logcatWebview';
 
 type LogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error' | 'assert';
 
@@ -19,10 +20,21 @@ export class LogcatManager implements vscode.Disposable {
     private logcatProcess?: ChildProcessWithoutNullStreams;
     private currentDeviceId?: string;
     private currentPackage?: string;
+    private webviewPanel?: LogcatWebviewPanel;
+    private useWebview: boolean = true;
 
-    constructor(deviceManager: AndroidDeviceManager) {
+    constructor(deviceManager: AndroidDeviceManager, extensionUri?: vscode.Uri) {
         this.deviceManager = deviceManager;
         this.outputChannel = vscode.window.createOutputChannel('Android Logcat');
+        
+        // Initialize webview panel if URI provided
+        if (extensionUri) {
+            this.webviewPanel = LogcatWebviewPanel.getInstance(extensionUri);
+        }
+
+        // Check user preference for UI mode
+        const config = vscode.workspace.getConfiguration('android-linter');
+        this.useWebview = config.get<boolean>('logcatUseWebview', true);
     }
 
     public async start(deviceId: string, packageName?: string): Promise<void> {
@@ -69,8 +81,29 @@ export class LogcatManager implements vscode.Disposable {
         this.currentDeviceId = deviceId;
         this.currentPackage = packageName;
 
+        // Show webview if enabled
+        if (this.useWebview && this.webviewPanel) {
+            this.webviewPanel.show();
+            this.webviewPanel.clear();
+        } else {
+            this.outputChannel.show(true);
+        }
+
         child.stdout.on('data', (data: Buffer) => {
-            this.outputChannel.append(data.toString());
+            const text = data.toString();
+            
+            // Always write to output channel (as backup)
+            this.outputChannel.append(text);
+            
+            // Also send to webview if enabled
+            if (this.useWebview && this.webviewPanel) {
+                const lines = text.split('\n');
+                lines.forEach(line => {
+                    if (line.trim()) {
+                        this.webviewPanel!.addLog(line);
+                    }
+                });
+            }
         });
 
         child.stderr.on('data', (data: Buffer) => {
@@ -101,6 +134,12 @@ export class LogcatManager implements vscode.Disposable {
         this.currentPackage = undefined;
     }
 
+    public clearWebview(): void {
+        if (this.webviewPanel) {
+            this.webviewPanel.clear();
+        }
+    }
+
     public async restart(): Promise<void> {
         if (this.currentDeviceId) {
             await this.start(this.currentDeviceId, this.currentPackage);
@@ -117,6 +156,9 @@ export class LogcatManager implements vscode.Disposable {
 
     public dispose(): void {
         void this.stop();
+        if (this.webviewPanel) {
+            this.webviewPanel.dispose();
+        }
         this.outputChannel.dispose();
     }
 

@@ -15,13 +15,28 @@ A powerful extension that brings Android Studio-like linting capabilities to Vis
 
 ## Features
 
+### 🎉 NEW: Android Explorer Panel
+📱 **Visual Device Management**: Dedicated sidebar panel showing all connected devices and emulators with real-time status indicators.
+⚡ **One-Click Actions**: Quick access to Install & Launch, Start/Stop Logcat, and Lint Project.
+📊 **Live Status Dashboard**: Monitor active device, app ID, logcat state, and Gradle activity at a glance.
+⭐ **Persistent Selection**: Your selected device is remembered across sessions.
+
+### 🎨 NEW: Enhanced Logcat WebView
+🌈 **Color-Coded Logs**: Error (red), Warning (yellow), Info (green), Debug (blue), Verbose (gray).
+🔍 **Interactive Filtering**: Click level buttons or tags to filter instantly.
+⏸️ **Pause/Resume**: Control log streaming without stopping collection.
+📋 **One-Click Copy**: Copy all visible logs to clipboard.
+📈 **Statistics**: See total logs, error count, and warning count in real-time.
+🎯 **Smart Search**: Real-time text search across all logs.
+
+### Core Features
 ✨ **Real-time Linting**: Automatically scans files when opened, saved, or edited.
 🎯 **Comprehensive Diagnostics**: Shows errors, warnings, and informational messages in the Problems panel.
 ☕ **Compilation Errors**: Detects Kotlin/Java compilation errors before running lint.
 🔧 **Quick Fixes**: Right-click on issues to apply suggested fixes.
 ⚡ **Gradle Integration**: Uses Android's official lint tools via Gradle while managing daemon lifetime.
 🚀 **Install & Run**: Deploy and launch your debug build on any connected device.
-📡 **Logcat Streaming**: Follow filtered `logcat` output (`package:mine` style) in a dedicated channel.
+📡 **Logcat Streaming**: Follow filtered `logcat` output (`package:mine` style) with beautiful UI.
 🧠 **Smart Activity Detection**: Auto-detects `applicationId` and launcher activity when possible.
 📊 **Multiple Report Formats**: Supports XML, JSON, and SARIF lint reports.
 
@@ -33,6 +48,27 @@ A powerful extension that brings Android Studio-like linting capabilities to Vis
 
 ## Usage
 
+### 🚀 Quick Start with Android Explorer
+
+1. **Open Android Explorer Panel**
+   - Click the Android icon (🤖) in the Activity Bar (left sidebar)
+   - Panel shows three sections: Devices, Actions, and Status
+
+2. **Select Your Device**
+   - In the **Devices** section, click any connected device to select it
+   - Selected device is marked with ⭐ and remembered across sessions
+   - Use the Refresh button if your device doesn't appear
+
+3. **Launch Your App**
+   - Click **"Install & Launch App"** in the Actions section
+   - Extension builds, installs, and launches automatically
+   - Logcat starts automatically in a beautiful WebView panel
+
+4. **View Logs**
+   - Enhanced logcat opens with color-coded logs
+   - Use toolbar to filter by level, search text, or pause streaming
+   - Click any tag to filter logs by that component
+
 ### Automatic Linting
 
 The extension automatically lints your files when you:
@@ -40,15 +76,19 @@ The extension automatically lints your files when you:
 - Save a file
 - Edit a file (if enabled in settings)
 
-### Manual Linting
+### Manual Commands
 
 Use the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`):
 - `Android: Lint Current File` - Lint the currently open file
 - `Android: Lint Entire Project` - Run lint on the entire project
 - `Android: Clear Lint Results` - Clear all lint diagnostics
-- `Android: Install Debug Build on Device` - Pick a device, run Gradle install, and launch the app
-- `Android: Start Logcat (package:mine)` - Stream logcat with optional package filter
+- `Android: Install Debug Build on Device` - Install and launch the app
+- `Android: Start Logcat (package:mine)` - Stream logcat with package filter
 - `Android: Stop Logcat` - Stop the current logcat session
+- `Android: Refresh Devices` - Refresh device list
+- `Android: Clear Logcat` - Clear logcat display
+
+Or use the **Android Explorer Panel** for visual access to all actions!
 
 ### Quick Fixes
 
@@ -93,6 +133,10 @@ Configure the extension through VS Code settings (`Ctrl+,`):
 - `android-linter.gradleDaemonIdleTimeoutMs`: Idle timeout before stopping daemons (default: `300000`)
 - `android-linter.gradleJvmArgs`: Additional JVM args for Gradle (default: `''`)
 - `android-linter.gradleMaxWorkers`: Limit Gradle max workers (default: `0` for default)
+- `android-linter.logcatUseWebview`: Use enhanced WebView panel for logcat (default: `true`)
+- `android-linter.logcatMaxBufferSize`: Maximum log entries to keep in memory (default: `10000`)
+- `android-linter.logcatAutoScroll`: Automatically scroll to newest logs (default: `true`)
+- `android-linter.showStatusBar`: Show 'Run on Android' button in status bar (default: `false`)
 
 ## How It Works
 
