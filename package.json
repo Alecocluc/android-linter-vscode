@@ -134,7 +134,7 @@
         },
         "android-linter.lintTimeout": {
           "type": "number",
-          "default": 60000,
+          "default": 600000,
           "description": "Timeout for lint operations in milliseconds"
         },
         "android-linter.debounceDelay": {

@@ -49,7 +49,7 @@ export class GradleLintRunner implements vscode.Disposable {
         cancellationToken?: vscode.CancellationToken
     ): Promise<LintIssue[]> {
         const config = vscode.workspace.getConfiguration('android-linter');
-        const timeout = config.get<number>('lintTimeout') || 60000;
+        const timeout = config.get<number>('lintTimeout') || 600000;
 
         this.log(`🔧 Starting Gradle lint task`);
 
