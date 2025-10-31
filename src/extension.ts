@@ -117,6 +117,29 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.relaunchApp', async () => {
+            androidExplorerView.setGradleRunning(true);
+            try {
+                await appLauncher.relaunchApp();
+            } finally {
+                androidExplorerView.setGradleRunning(false);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.debugApp', async () => {
+            await appLauncher.debugApp();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.stopApp', async () => {
+            await appLauncher.stopApp();
+        })
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand('android-linter.showLogcat', async () => {
             await appLauncher.startLogcatSession();
             androidExplorerView.setLogcatRunning(true);

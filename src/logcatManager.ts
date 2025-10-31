@@ -73,21 +73,20 @@ export class LogcatManager implements vscode.Disposable {
         }
 
         this.log(`📡 Starting logcat for ${deviceId}${packageName ? ` (package: ${packageName})` : ''}`);
-        this.outputChannel.show(true);
 
-        const child = spawn(adbPath, args, { shell: process.platform === 'win32' });
-
-        this.logcatProcess = child;
-        this.currentDeviceId = deviceId;
-        this.currentPackage = packageName;
-
-        // Show webview if enabled
+        // Show webview or output channel
         if (this.useWebview && this.webviewPanel) {
             this.webviewPanel.show();
             this.webviewPanel.clear();
         } else {
             this.outputChannel.show(true);
         }
+
+        const child = spawn(adbPath, args, { shell: process.platform === 'win32' });
+
+        this.logcatProcess = child;
+        this.currentDeviceId = deviceId;
+        this.currentPackage = packageName;
 
         child.stdout.on('data', (data: Buffer) => {
             const text = data.toString();

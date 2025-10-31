@@ -175,6 +175,41 @@ export class AndroidAppLauncher implements vscode.Disposable {
         await this.logcatManager.stop();
     }
 
+    public async relaunchApp(): Promise<void> {
+        this.log('🔄 Relaunching app...');
+        await this.stopApp();
+        await this.launch();
+        this.log('✅ Relaunch complete');
+    }
+
+    public async stopApp(): Promise<void> {
+        const workspaceFolder = this.getPrimaryWorkspace();
+        if (!workspaceFolder) {
+            vscode.window.showWarningMessage('Android Linter: No workspace folder found.');
+            return;
+        }
+
+        const deviceId = this.lastDeviceId;
+        if (!deviceId) {
+            vscode.window.showWarningMessage('Android Linter: No app has been launched yet.');
+            return;
+        }
+
+        const applicationId = await this.resolveApplicationId(workspaceFolder.uri.fsPath);
+        if (!applicationId) {
+            vscode.window.showWarningMessage('Android Linter: Could not determine application ID to stop.');
+            return;
+        }
+
+        this.log(`🛑 Stopping app: ${applicationId} on ${deviceId}`);
+        await this.deviceManager.forceStop(deviceId, applicationId);
+        vscode.window.showInformationMessage(`App ${applicationId} stopped.`);
+    }
+
+    public async debugApp(): Promise<void> {
+        vscode.window.showInformationMessage('Android Linter: Debugging is not yet implemented.');
+    }
+
     public dispose(): void {
         // Nothing additional to dispose currently
     }

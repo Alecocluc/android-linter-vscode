@@ -115,7 +115,7 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
         } else {
             for (const device of this.devices) {
                 const isSelected = this.selectedDevice?.id === device.id;
-                const label = device.label + (isSelected ? ' ⭐' : '');
+                const label = device.label; // No more star emoji
                 
                 const node = new TreeNode(
                     label,
@@ -174,19 +174,42 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
     private getActionNodes(): Promise<TreeNode[]> {
         const nodes: TreeNode[] = [];
 
-        // Install & Launch
-        const launchNode = new TreeNode(
-            'Install & Launch App',
-            'action',
-            vscode.TreeItemCollapsibleState.None
-        );
-        launchNode.iconPath = new vscode.ThemeIcon('debug-start');
-        launchNode.command = {
+        const runNode = new TreeNode('Run App', 'action', vscode.TreeItemCollapsibleState.None);
+        runNode.iconPath = new vscode.ThemeIcon('debug-start');
+        runNode.command = {
             command: 'android-linter.launchOnDevice',
-            title: 'Launch'
+            title: 'Run App'
         };
-        launchNode.tooltip = 'Install debug build and launch on selected device';
-        nodes.push(launchNode);
+        runNode.tooltip = 'Install and run the app on the selected device';
+        nodes.push(runNode);
+
+        const relaunchNode = new TreeNode('Relaunch App', 'action', vscode.TreeItemCollapsibleState.None);
+        relaunchNode.iconPath = new vscode.ThemeIcon('debug-rerun');
+        relaunchNode.command = {
+            command: 'android-linter.relaunchApp',
+            title: 'Relaunch App'
+        };
+        relaunchNode.tooltip = 'Force stop and relaunch the app';
+        nodes.push(relaunchNode);
+
+        const debugNode = new TreeNode('Debug App', 'action', vscode.TreeItemCollapsibleState.None);
+        debugNode.iconPath = new vscode.ThemeIcon('debug-alt');
+        debugNode.command = {
+            command: 'android-linter.debugApp',
+            title: 'Debug App'
+        };
+        debugNode.tooltip = 'Launch the app in debug mode (not implemented yet)';
+        nodes.push(debugNode);
+
+        const stopNode = new TreeNode('Stop App', 'action', vscode.TreeItemCollapsibleState.None);
+        stopNode.iconPath = new vscode.ThemeIcon('debug-stop');
+        stopNode.command = {
+            command: 'android-linter.stopApp',
+            title: 'Stop App'
+        };
+        stopNode.tooltip = 'Force stop the application on the selected device';
+        nodes.push(stopNode);
+
 
         // Start/Stop Logcat
         if (this.isLogcatRunning) {

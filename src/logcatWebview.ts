@@ -34,7 +34,7 @@ export class LogcatWebviewPanel {
 
         this.panel = vscode.window.createWebviewPanel(
             'androidLogcat',
-            '📱 Android Logcat',
+            'Android Logcat',
             vscode.ViewColumn.Two,
             {
                 enableScripts: true,
@@ -371,9 +371,9 @@ export class LogcatWebviewPanel {
 <body>
     <div id="toolbar">
         <div class="toolbar-group">
-            <button id="clear-btn" title="Clear logs">🧹 Clear</button>
-            <button id="pause-btn" title="Pause/Resume">⏸️ Pause</button>
-            <button id="autoscroll-btn" class="active" title="Toggle auto-scroll">🔽 Auto-scroll</button>
+            <button id="clear-btn" title="Clear logs">Clear</button>
+            <button id="pause-btn" title="Pause/Resume">Pause</button>
+            <button id="autoscroll-btn" class="active" title="Toggle auto-scroll">Auto-scroll</button>
         </div>
 
         <div class="toolbar-divider"></div>
@@ -391,13 +391,13 @@ export class LogcatWebviewPanel {
 
         <div class="toolbar-group">
             <input type="text" id="search-input" placeholder="Search logs..." />
-            <button id="clear-filter-btn" title="Clear filters">✖ Clear Filter</button>
+            <button id="clear-filter-btn" title="Clear filters">Clear Filter</button>
         </div>
 
         <div class="toolbar-divider"></div>
 
         <div class="toolbar-group">
-            <button id="copy-btn" title="Copy all visible logs">📋 Copy</button>
+            <button id="copy-btn" title="Copy all visible logs">Copy</button>
         </div>
 
         <div id="stats">
@@ -409,7 +409,7 @@ export class LogcatWebviewPanel {
 
     <div id="logs-container">
         <div id="empty-state">
-            <div class="icon">📱</div>
+            <div class="icon"></div>
             <div>Waiting for logcat output...</div>
             <div style="font-size: 10px;">Start logcat to see logs here</div>
         </div>
@@ -439,11 +439,11 @@ export class LogcatWebviewPanel {
             if (isPaused) {
                 vscode.postMessage({ type: 'resume' });
                 isPaused = false;
-                pauseBtn.textContent = '⏸️ Pause';
+                pauseBtn.textContent = 'Pause';
             } else {
                 vscode.postMessage({ type: 'pause' });
                 isPaused = true;
-                pauseBtn.textContent = '▶️ Resume';
+                pauseBtn.textContent = 'Resume';
             }
         });
 

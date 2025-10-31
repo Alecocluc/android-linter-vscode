@@ -174,6 +174,22 @@ export class AndroidDeviceManager implements vscode.Disposable {
         }
     }
 
+    public async forceStop(deviceId: string, packageName: string): Promise<void> {
+        const adbPath = this.getAdbPath();
+        try {
+            await execFileAsync(
+                adbPath,
+                ['-s', deviceId, 'shell', 'am', 'force-stop', packageName],
+                { timeout: 15000 }
+            );
+            this.log(`✅ Force-stopped package ${packageName} on ${deviceId}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.log(`❌ Failed to force-stop package ${packageName}: ${message}`);
+            // Don't throw an error, just log it
+        }
+    }
+
     public getAdbPath(): string {
         const config = vscode.workspace.getConfiguration('android-linter');
         let adbPath = (config.get<string>('adbPath') || 'adb').trim();
