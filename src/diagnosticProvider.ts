@@ -20,7 +20,6 @@ export interface QuickFix {
 
 export class DiagnosticProvider implements vscode.Disposable {
     private diagnosticCollection: vscode.DiagnosticCollection;
-    private issueMap: Map<string, LintIssue[]> = new Map();
 
     constructor() {
         this.diagnosticCollection = vscode.languages.createDiagnosticCollection('android-linter');
@@ -76,23 +75,50 @@ export class DiagnosticProvider implements vscode.Disposable {
             }
 
             this.diagnosticCollection.set(uri, diagnostics);
-            this.issueMap.set(file, fileIssues);
         });
     }
 
     public clearFile(file: string): void {
         const uri = vscode.Uri.file(file);
         this.diagnosticCollection.delete(uri);
-        this.issueMap.delete(file);
     }
 
     public clear(): void {
         this.diagnosticCollection.clear();
-        this.issueMap.clear();
     }
 
     public getIssuesForFile(file: string): LintIssue[] {
-        return this.issueMap.get(file) || [];
+        // Return diagnostics from the collection instead of a separate map
+        const uri = vscode.Uri.file(file);
+        const diagnostics = this.diagnosticCollection.get(uri);
+        
+        if (!diagnostics || diagnostics.length === 0) {
+            return [];
+        }
+
+        // Convert diagnostics back to LintIssue format if needed
+        // This is rarely used, so the conversion overhead is acceptable
+        return diagnostics.map(diag => ({
+            file: file,
+            line: diag.range.start.line + 1,
+            column: diag.range.start.character + 1,
+            severity: this.diagnosticSeverityToString(diag.severity),
+            message: diag.message,
+            source: diag.source || 'Android Lint',
+            id: diag.code?.toString() || 'UnknownId',
+            category: 'General'
+        }));
+    }
+
+    private diagnosticSeverityToString(severity: vscode.DiagnosticSeverity): 'error' | 'warning' | 'information' {
+        switch (severity) {
+            case vscode.DiagnosticSeverity.Error:
+                return 'error';
+            case vscode.DiagnosticSeverity.Warning:
+                return 'warning';
+            default:
+                return 'information';
+        }
     }
 
     private getSeverity(severity: string): vscode.DiagnosticSeverity {
@@ -124,6 +150,5 @@ export class DiagnosticProvider implements vscode.Disposable {
 
     public dispose(): void {
         this.diagnosticCollection.dispose();
-        this.issueMap.clear();
     }
 }
