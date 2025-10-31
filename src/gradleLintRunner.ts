@@ -1,20 +1,19 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { LintIssue } from './diagnosticProvider';
 import { LintReportParser } from './lintReportParser';
-
-const execAsync = promisify(exec);
+import { GradleCommandError, GradleProcessManager } from './gradleProcessManager';
 
 export class GradleLintRunner implements vscode.Disposable {
     private parser: LintReportParser;
     private outputChannel: vscode.OutputChannel;
+    private gradleManager: GradleProcessManager;
 
-    constructor(outputChannel?: vscode.OutputChannel) {
+    constructor(gradleManager: GradleProcessManager, outputChannel?: vscode.OutputChannel) {
         this.parser = new LintReportParser(outputChannel);
         this.outputChannel = outputChannel || vscode.window.createOutputChannel('Android Linter');
+        this.gradleManager = gradleManager;
     }
 
     private log(message: string): void {
@@ -50,50 +49,32 @@ export class GradleLintRunner implements vscode.Disposable {
         cancellationToken?: vscode.CancellationToken
     ): Promise<LintIssue[]> {
         const config = vscode.workspace.getConfiguration('android-linter');
-        const gradlePath = config.get<string>('gradlePath') || './gradlew';
         const timeout = config.get<number>('lintTimeout') || 60000;
 
-        // Determine the correct gradle wrapper command
-        const isWindows = process.platform === 'win32';
-        const gradleCmd = isWindows ? 'gradlew.bat' : './gradlew';
-        const fullGradlePath = path.join(workspaceRoot, gradleCmd);
+        this.log(`🔧 Starting Gradle lint task`);
 
-        this.log(`🔧 Looking for Gradle wrapper at: ${fullGradlePath}`);
-
-        // Check if gradlew exists
-        if (!fs.existsSync(fullGradlePath)) {
-            const error = `Gradle wrapper not found at ${fullGradlePath}`;
-            this.log(`❌ ${error}`);
-            vscode.window.showErrorMessage(`Android Linter: ${error}. Make sure you're in an Android project.`);
-            throw new Error(error);
-        }
-
-        this.log(`✅ Found Gradle wrapper`);
-
-        // Run lint task with XML report output
-        const lintCmd = `"${fullGradlePath}" lint --continue`;
-        this.log(`⚙️ Running command: ${lintCmd}`);
-        
         try {
-            const { stdout, stderr } = await execAsync(lintCmd, {
-                cwd: workspaceRoot,
-                timeout: timeout,
-                maxBuffer: 10 * 1024 * 1024 // 10MB buffer
-            });
+            const result = await this.gradleManager.runCommand(
+                workspaceRoot,
+                ['lint', '--continue'],
+                {
+                    timeout,
+                    cancellationToken
+                }
+            );
 
-            if (stdout) {
-                this.log(`📤 Gradle output: ${stdout.substring(0, 500)}`);
+            if (result.stdout) {
+                this.log(`📤 Gradle output: ${result.stdout.substring(0, 500)}`);
             }
-            if (stderr) {
-                this.log(`⚠️ Gradle stderr: ${stderr.substring(0, 500)}`);
+            if (result.stderr) {
+                this.log(`⚠️ Gradle stderr: ${result.stderr.substring(0, 500)}`);
             }
 
             if (cancellationToken?.isCancellationRequested) {
-                this.log(`🛑 Lint cancelled`);
+                this.log('🛑 Lint cancelled');
                 return [];
             }
 
-            // Parse the lint report
             return await this.parseLintResults(workspaceRoot);
         } catch (error: any) {
             // Lint command may exit with non-zero even when successful
@@ -102,7 +83,9 @@ export class GradleLintRunner implements vscode.Disposable {
             this.log(`   Error: ${error.message}`);
             
             // Check if there are compilation errors in the output
-            const errorOutput = (error.stdout || '') + '\n' + (error.stderr || '');
+            const stdout = error instanceof GradleCommandError ? error.stdout : error.stdout || '';
+            const stderr = error instanceof GradleCommandError ? error.stderr : error.stderr || '';
+            const errorOutput = `${stdout}\n${stderr}`;
             
             // Check for common Gradle setup errors
             if (errorOutput.includes('SDK location not found') || errorOutput.includes('ANDROID_HOME')) {
@@ -139,7 +122,8 @@ export class GradleLintRunner implements vscode.Disposable {
                 const results = await this.parseLintResults(workspaceRoot);
                 
                 // If no results found but gradle failed, it's an actual error
-                if (results.length === 0 && error.code !== 0) {
+                const exitCode = error instanceof GradleCommandError ? error.exitCode : error.code;
+                if (results.length === 0 && exitCode !== 0) {
                     const errorMsg = 'Gradle lint failed without generating reports. Check the Output panel for details.';
                     this.log(`❌ ${errorMsg}`);
                     this.log(`   Full error: ${errorOutput.substring(0, 1000)}`);

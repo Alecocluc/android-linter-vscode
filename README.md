@@ -19,8 +19,10 @@ A powerful extension that brings Android Studio-like linting capabilities to Vis
 🎯 **Comprehensive Diagnostics**: Shows errors, warnings, and informational messages in the Problems panel.
 ☕ **Compilation Errors**: Detects Kotlin/Java compilation errors before running lint.
 🔧 **Quick Fixes**: Right-click on issues to apply suggested fixes.
-⚡ **Gradle Integration**: Uses Android's official lint tools via Gradle.
-🚀 **Lightweight**: No need to run Android Studio.
+⚡ **Gradle Integration**: Uses Android's official lint tools via Gradle while managing daemon lifetime.
+🚀 **Install & Run**: Deploy and launch your debug build on any connected device.
+📡 **Logcat Streaming**: Follow filtered `logcat` output (`package:mine` style) in a dedicated channel.
+🧠 **Smart Activity Detection**: Auto-detects `applicationId` and launcher activity when possible.
 📊 **Multiple Report Formats**: Supports XML, JSON, and SARIF lint reports.
 
 ## Requirements
@@ -44,6 +46,9 @@ Use the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`):
 - `Android: Lint Current File` - Lint the currently open file
 - `Android: Lint Entire Project` - Run lint on the entire project
 - `Android: Clear Lint Results` - Clear all lint diagnostics
+- `Android: Install Debug Build on Device` - Pick a device, run Gradle install, and launch the app
+- `Android: Start Logcat (package:mine)` - Stream logcat with optional package filter
+- `Android: Stop Logcat` - Stop the current logcat session
 
 ### Quick Fixes
 
@@ -73,15 +78,30 @@ Configure the extension through VS Code settings (`Ctrl+,`):
 - `android-linter.lintTimeout`: Timeout for lint operations in ms (default: `60000`)
 - `android-linter.debounceDelay`: Delay before running lint after changes in ms (default: `2000`)
 - `android-linter.enableQuickFixes`: Enable quick fix suggestions (default: `true`)
+- `android-linter.adbPath`: Path to the `adb` executable (default: `adb`)
+- `android-linter.launchModule`: Gradle module containing the app (default: `app`)
+- `android-linter.launchApplicationId`: Override the detected `applicationId`
+- `android-linter.launchInstallTask`: Gradle task for deployment (default: `installDebug`)
+- `android-linter.launchInstallTimeoutMs`: Timeout for install task (default: `240000`)
+- `android-linter.logcatLevel`: Minimum log level for logcat streaming (default: `info`)
+- `android-linter.logcatFormat`: Logcat output format (default: `threadtime`)
+- `android-linter.logcatAutoClear`: Clear logcat buffer before streaming (default: `true`)
+- `android-linter.logcatAutoStartOnLaunch`: Auto-start logcat after launch (default: `true`)
+- `android-linter.gradleStopDaemonsOnIdle`: Stop Gradle daemons after inactivity (default: `true`)
+- `android-linter.gradleDaemonIdleTimeoutMs`: Idle timeout before stopping daemons (default: `300000`)
+- `android-linter.gradleJvmArgs`: Additional JVM args for Gradle (default: `''`)
+- `android-linter.gradleMaxWorkers`: Limit Gradle max workers (default: `0` for default)
 
 ## How It Works
 
 1. **Detection**: The extension detects Android projects by looking for `build.gradle` or `build.gradle.kts` files.
 2. **Lint Execution**: Runs `./gradlew lint --continue` (or `gradlew.bat` on Windows) in the background.
-3. **Error Detection**: Parses both compilation errors and lint warnings from the Gradle output.
-4. **Report Parsing**: Reads XML/JSON lint reports from `build/reports/` for detailed warnings.
-5. **Display**: Shows errors and warnings in VS Code's Problems panel.
-6. **Quick Fixes**: Provides contextual code actions for common issues.
+3. **Daemon Management**: Keeps Gradle daemons alive while work is active and stops them after an idle timeout.
+4. **Error Detection**: Parses both compilation errors and lint warnings from the Gradle output.
+5. **Report Parsing**: Reads XML/JSON lint reports from `build/reports/` for detailed warnings.
+6. **Display**: Shows errors and warnings in VS Code's Problems panel.
+7. **Quick Fixes**: Provides contextual code actions for common issues.
+8. **Deploy & Launch**: Installs the selected build variant, launches the app, and optionally starts logcat.
 
 ## Changelog
 

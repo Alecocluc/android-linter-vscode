@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { DiagnosticProvider, LintIssue } from './diagnosticProvider';
 import { GradleLintRunner } from './gradleLintRunner';
+import { GradleProcessManager } from './gradleProcessManager';
 
 export class LintManager implements vscode.Disposable {
     private diagnosticProvider: DiagnosticProvider;
@@ -12,10 +13,14 @@ export class LintManager implements vscode.Disposable {
     private isDisposed = false;
     private latestRequestId = 0;
 
-    constructor(diagnosticProvider: DiagnosticProvider, outputChannel?: vscode.OutputChannel) {
+    constructor(
+        diagnosticProvider: DiagnosticProvider,
+        gradleManager: GradleProcessManager,
+        outputChannel?: vscode.OutputChannel
+    ) {
         this.diagnosticProvider = diagnosticProvider;
         this.outputChannel = outputChannel || vscode.window.createOutputChannel('Android Linter');
-        this.gradleLintRunner = new GradleLintRunner(this.outputChannel);
+        this.gradleLintRunner = new GradleLintRunner(gradleManager, this.outputChannel);
     }
 
     private log(message: string): void {

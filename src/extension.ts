@@ -4,9 +4,18 @@ import * as path from 'path';
 import { LintManager } from './lintManager';
 import { DiagnosticProvider } from './diagnosticProvider';
 import { CodeActionProvider } from './codeActionProvider';
+import { GradleProcessManager } from './gradleProcessManager';
+import { AndroidDeviceManager } from './androidDeviceManager';
+import { LogcatManager } from './logcatManager';
+import { AndroidAppLauncher } from './androidLauncher';
 
 let lintManager: LintManager;
 let diagnosticProvider: DiagnosticProvider;
+let gradleProcessManager: GradleProcessManager;
+let deviceManager: AndroidDeviceManager;
+let logcatManager: LogcatManager;
+let appLauncher: AndroidAppLauncher;
+let runStatusBarItem: vscode.StatusBarItem;
 
 function log(outputChannel: vscode.OutputChannel, message: string) {
     const config = vscode.workspace.getConfiguration('android-linter');
@@ -30,8 +39,20 @@ export function activate(context: vscode.ExtensionContext) {
     diagnosticProvider = new DiagnosticProvider();
     context.subscriptions.push(diagnosticProvider);
 
+    gradleProcessManager = new GradleProcessManager(outputChannel);
+    context.subscriptions.push(gradleProcessManager);
+
+    deviceManager = new AndroidDeviceManager(outputChannel);
+    context.subscriptions.push(deviceManager);
+
+    logcatManager = new LogcatManager(deviceManager);
+    context.subscriptions.push(logcatManager);
+
+    appLauncher = new AndroidAppLauncher(gradleProcessManager, deviceManager, logcatManager, outputChannel);
+    context.subscriptions.push(appLauncher);
+
     // Initialize lint manager
-    lintManager = new LintManager(diagnosticProvider, outputChannel);
+    lintManager = new LintManager(diagnosticProvider, gradleProcessManager, outputChannel);
     
     // Log workspace info
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -65,6 +86,31 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('Lint results cleared');
         })
     );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.launchOnDevice', async () => {
+            await appLauncher.launch();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.showLogcat', async () => {
+            await appLauncher.startLogcatSession();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.stopLogcat', async () => {
+            await appLauncher.stopLogcat();
+        })
+    );
+
+    runStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    runStatusBarItem.text = '$(debug-start) Run on Android';
+    runStatusBarItem.tooltip = 'Install Debug build and launch on a connected device';
+    runStatusBarItem.command = 'android-linter.launchOnDevice';
+    runStatusBarItem.show();
+    context.subscriptions.push(runStatusBarItem);
 
     // Register code action provider for quick fixes
     const codeActionProvider = new CodeActionProvider();
@@ -133,6 +179,18 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
     if (lintManager) {
         lintManager.dispose();
+    }
+    if (logcatManager) {
+        logcatManager.dispose();
+    }
+    if (deviceManager) {
+        deviceManager.dispose();
+    }
+    if (gradleProcessManager) {
+        gradleProcessManager.dispose();
+    }
+    if (runStatusBarItem) {
+        runStatusBarItem.dispose();
     }
 }
 

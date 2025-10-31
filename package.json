@@ -38,6 +38,18 @@
       {
         "command": "android-linter.clearDiagnostics",
         "title": "Android: Clear Lint Results"
+      },
+      {
+        "command": "android-linter.launchOnDevice",
+        "title": "Android: Install Debug Build on Device"
+      },
+      {
+        "command": "android-linter.showLogcat",
+        "title": "Android: Start Logcat (package:mine)"
+      },
+      {
+        "command": "android-linter.stopLogcat",
+        "title": "Android: Stop Logcat"
       }
     ],
     "configuration": {
@@ -99,6 +111,94 @@
           "type": "boolean",
           "default": true,
           "description": "Enable verbose logging to the output channel for debugging"
+        },
+        "android-linter.adbPath": {
+          "type": "string",
+          "default": "adb",
+          "description": "Path to the adb executable"
+        },
+        "android-linter.launchModule": {
+          "type": "string",
+          "default": "app",
+          "description": "Gradle module that contains the Android application"
+        },
+        "android-linter.launchApplicationId": {
+          "type": "string",
+          "default": "",
+          "description": "Override the applicationId used for deployment and logcat"
+        },
+        "android-linter.launchRememberApplicationId": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember manually entered applicationId in workspace settings"
+        },
+        "android-linter.launchInstallTask": {
+          "type": "string",
+          "default": "installDebug",
+          "description": "Gradle task used to install the debug build"
+        },
+        "android-linter.launchInstallTimeoutMs": {
+          "type": "number",
+          "default": 240000,
+          "description": "Timeout for the Gradle install task in milliseconds"
+        },
+        "android-linter.logcatLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "verbose",
+            "debug",
+            "info",
+            "warn",
+            "error",
+            "assert"
+          ],
+          "description": "Minimum log level when streaming logcat"
+        },
+        "android-linter.logcatFormat": {
+          "type": "string",
+          "default": "threadtime",
+          "enum": [
+            "brief",
+            "process",
+            "tag",
+            "thread",
+            "raw",
+            "time",
+            "threadtime",
+            "long"
+          ],
+          "description": "Logcat output format"
+        },
+        "android-linter.logcatAutoClear": {
+          "type": "boolean",
+          "default": true,
+          "description": "Clear device logcat buffer before starting a new session"
+        },
+        "android-linter.logcatAutoStartOnLaunch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start logcat after launching the app"
+        },
+        "android-linter.gradleStopDaemonsOnIdle": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stop Gradle daemons after a period of inactivity"
+        },
+        "android-linter.gradleDaemonIdleTimeoutMs": {
+          "type": "number",
+          "default": 300000,
+          "description": "Idle time in milliseconds before Gradle daemons are stopped"
+        },
+        "android-linter.gradleJvmArgs": {
+          "type": "string",
+          "default": "",
+          "description": "Additional JVM arguments to pass to Gradle daemons"
+        },
+        "android-linter.gradleMaxWorkers": {
+          "type": "number",
+          "default": 0,
+          "description": "Limit Gradle max workers (0 uses Gradle default)"
         }
       }
     }
