@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import { DiagnosticProvider, LintIssue } from './diagnosticProvider';
 import { GradleLintRunner } from './gradleLintRunner';
 
@@ -8,9 +7,10 @@ export class LintManager implements vscode.Disposable {
     private diagnosticProvider: DiagnosticProvider;
     private gradleLintRunner: GradleLintRunner;
     private outputChannel: vscode.OutputChannel;
-    private pendingLints: Map<string, vscode.TextDocument> = new Map();
+    private pendingLints: Map<string, { document: vscode.TextDocument; requestId: number }> = new Map();
     private queuePromise: Promise<void> | undefined;
     private isDisposed = false;
+    private latestRequestId = 0;
 
     constructor(diagnosticProvider: DiagnosticProvider, outputChannel?: vscode.OutputChannel) {
         this.diagnosticProvider = diagnosticProvider;
@@ -31,7 +31,11 @@ export class LintManager implements vscode.Disposable {
         }
 
         const filePath = document.uri.fsPath;
-        this.pendingLints.set(filePath, document);
+        const requestId = ++this.latestRequestId;
+
+        // Keep only the most recent request so users get fresh diagnostics quickly
+        this.pendingLints.clear();
+        this.pendingLints.set(filePath, { document, requestId });
 
         if (!this.queuePromise) {
             this.queuePromise = this.processQueue();
@@ -47,11 +51,11 @@ export class LintManager implements vscode.Disposable {
                 break;
             }
 
-            const [filePath, document] = iterator.value;
+            const [filePath, pending] = iterator.value;
             this.pendingLints.delete(filePath);
 
             try {
-                await this.doLintFile(document);
+                await this.doLintFile(pending.document, pending.requestId);
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : String(error);
                 this.log(`❌ Lint failed for ${filePath}: ${errorMsg}`);
@@ -61,7 +65,7 @@ export class LintManager implements vscode.Disposable {
         this.queuePromise = undefined;
     }
 
-    private async doLintFile(document: vscode.TextDocument): Promise<void> {
+    private async doLintFile(document: vscode.TextDocument, requestId: number): Promise<void> {
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
         if (!workspaceFolder) {
             this.log('⚠️ No workspace folder found for file');
@@ -70,6 +74,10 @@ export class LintManager implements vscode.Disposable {
 
         this.log(`\n🔍 Starting lint for: ${document.fileName}`);
         this.log(`   Workspace: ${workspaceFolder.uri.fsPath}`);
+
+        let issues: LintIssue[] = [];
+        let errorCount = 0;
+        let warningCount = 0;
 
         try {
             // Show progress
@@ -80,47 +88,46 @@ export class LintManager implements vscode.Disposable {
                     cancellable: false
                 },
                 async () => {
-                    const allIssues: LintIssue[] = [];
-                    
                     // Run Android Lint (which also catches compilation errors)
                     this.log(`\n📍 Running Android Lint and compilation check...`);
-                    const lintIssues = await this.gradleLintRunner.lintFile(
+                    issues = await this.gradleLintRunner.lintFile(
                         workspaceFolder.uri.fsPath,
                         document.uri.fsPath
                     );
-                    allIssues.push(...lintIssues);
                     
                     // Count errors vs warnings
-                    const errors = lintIssues.filter(i => i.severity === 'error');
-                    const warnings = lintIssues.filter(i => i.severity === 'warning');
+                    errorCount = issues.filter(i => i.severity === 'error').length;
+                    warningCount = issues.filter(i => i.severity === 'warning').length;
                     
-                    this.log(`\n✅ Analysis completed: ${errors.length} error(s), ${warnings.length} warning(s)`);
-                    
-                    // Clear and add all issues
-                    this.diagnosticProvider.clear();
-                    
-                    if (allIssues.length > 0) {
-                        this.log(`📊 Adding ${allIssues.length} issues to Problems panel...`);
-                        this.diagnosticProvider.addIssues(allIssues);
-                        this.log(`✅ Issues added to Problems panel`);
-                        
-                        // Show summary notification
-                        if (errors.length > 0) {
-                            vscode.window.showWarningMessage(
-                                `Android Lint: Found ${errors.length} error(s) and ${warnings.length > 0 ? ` and ${warnings.length} warning(s)` : ''}`
-                            );
-                        } else if (warnings.length > 0) {
-                            vscode.window.showInformationMessage(
-                                `Android Lint: Found ${warnings.length} warning(s)`
-                            );
-                        }
-                    } else {
-                        // Only show success if there were actually no issues
-                        // (not if gradle failed without generating reports)
-                        vscode.window.showInformationMessage('Android Lint: No issues found! ✓');
-                    }
+                    this.log(`\n✅ Analysis completed: ${errorCount} error(s), ${warningCount} warning(s)`);
                 }
             );
+
+            if (!this.shouldApplyResult(requestId)) {
+                this.log('⚪ Lint result discarded because a newer request is pending');
+                return;
+            }
+
+            // Clear and add all issues
+            this.diagnosticProvider.clear();
+
+            if (issues.length > 0) {
+                this.log(`📊 Adding ${issues.length} issues to Problems panel...`);
+                this.diagnosticProvider.addIssues(issues);
+                this.log(`✅ Issues added to Problems panel`);
+
+                if (errorCount > 0) {
+                    vscode.window.showWarningMessage(
+                        `Android Lint: Found ${errorCount} error(s)` + (warningCount > 0 ? ` and ${warningCount} warning(s)` : '')
+                    );
+                } else if (warningCount > 0) {
+                    vscode.window.showInformationMessage(
+                        `Android Lint: Found ${warningCount} warning(s)`
+                    );
+                }
+            } else {
+                vscode.window.showInformationMessage('Android Lint: No issues found! ✓');
+            }
         } catch (error) {
             const errorMsg = `Failed to lint file: ${error instanceof Error ? error.message : String(error)}`;
             this.log(`❌ ${errorMsg}`);
@@ -184,5 +191,9 @@ export class LintManager implements vscode.Disposable {
         this.gradleLintRunner.dispose();
         this.pendingLints.clear();
         this.isDisposed = true;
+    }
+
+    private shouldApplyResult(requestId: number): boolean {
+        return !this.isDisposed && requestId === this.latestRequestId;
     }
 }
