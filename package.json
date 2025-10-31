@@ -180,6 +180,16 @@
           "default": true,
           "description": "Automatically start logcat after launching the app"
         },
+        "android-linter.logcatPidWaitTimeoutMs": {
+          "type": "number",
+          "default": 10000,
+          "description": "How long to wait for the app process before applying PID filtering"
+        },
+        "android-linter.logcatPidPollIntervalMs": {
+          "type": "number",
+          "default": 500,
+          "description": "Interval between PID checks while waiting for the app process"
+        },
         "android-linter.gradleStopDaemonsOnIdle": {
           "type": "boolean",
           "default": true,

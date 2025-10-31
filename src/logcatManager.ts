@@ -54,11 +54,7 @@ export class LogcatManager implements vscode.Disposable {
             }
         }
 
-        if (appliedPidFilter) {
-            args.push(`*:${logLevel}`);
-        } else {
-            args.push(`*:${logLevel}`);
-        }
+        args.push(`*:${logLevel}`);
 
         if (autoClear) {
             await this.deviceManager.clearLogcat(deviceId);

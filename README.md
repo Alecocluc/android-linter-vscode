@@ -87,6 +87,8 @@ Configure the extension through VS Code settings (`Ctrl+,`):
 - `android-linter.logcatFormat`: Logcat output format (default: `threadtime`)
 - `android-linter.logcatAutoClear`: Clear logcat buffer before streaming (default: `true`)
 - `android-linter.logcatAutoStartOnLaunch`: Auto-start logcat after launch (default: `true`)
+- `android-linter.logcatPidWaitTimeoutMs`: Time to wait for the app process before falling back to full logcat (default: `10000`)
+- `android-linter.logcatPidPollIntervalMs`: Interval between PID checks while waiting for the app process (default: `500`)
 - `android-linter.gradleStopDaemonsOnIdle`: Stop Gradle daemons after inactivity (default: `true`)
 - `android-linter.gradleDaemonIdleTimeoutMs`: Idle timeout before stopping daemons (default: `300000`)
 - `android-linter.gradleJvmArgs`: Additional JVM args for Gradle (default: `''`)
