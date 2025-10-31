@@ -171,13 +171,10 @@ export class GradleLintRunner implements vscode.Disposable {
             this.log(`   Checking: ${reportPath}`);
             if (fs.existsSync(reportPath)) {
                 this.log(`   ✅ Found XML report: ${reportPath}`);
-                const xmlContent = fs.readFileSync(reportPath, 'utf-8');
-                this.log(`   📄 Report size: ${xmlContent.length} bytes`);
-                
-                // Log first 500 chars of XML to debug
-                this.log(`   📋 XML preview: ${xmlContent.substring(0, 500)}...`);
-                
-                const parsedIssues = await this.parser.parseXmlReport(xmlContent, workspaceRoot);
+                const stats = fs.statSync(reportPath);
+                this.log(`   📄 Report size: ${stats.size} bytes`);
+
+                const parsedIssues = await this.parser.parseXmlReport(reportPath, workspaceRoot);
                 this.log(`   🎯 Parser returned ${parsedIssues.length} issues`);
                 
                 return parsedIssues;

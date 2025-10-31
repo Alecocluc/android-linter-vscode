@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { parseStringPromise } from 'xml2js';
+import { createReadStream } from 'fs';
+import { ReadStream } from 'fs';
+import { createStream, QualifiedTag, SAXStream } from 'sax';
 import { LintIssue, QuickFix } from './diagnosticProvider';
 
 export class LintReportParser {
@@ -20,87 +22,105 @@ export class LintReportParser {
             this.outputChannel.appendLine(`   [Parser] ${message}`);
         }
     }
-    public async parseXmlReport(xmlContent: string, workspaceRoot: string): Promise<LintIssue[]> {
+    public async parseXmlReport(reportPath: string, workspaceRoot: string): Promise<LintIssue[]> {
         const issues: LintIssue[] = [];
-        const seenIssues = new Set<string>(); // Track unique issues
+        const seenIssues = new Set<string>();
 
-        try {
-            this.log(`Starting XML parsing...`);
-            const result = await parseStringPromise(xmlContent);
-            
-            this.log(`Parsed XML result structure: ${Object.keys(result).join(', ')}`);
-            
-            if (!result.issues) {
-                this.log(`No 'issues' property found in result`);
-                return issues;
-            }
+        this.log(`Starting XML streaming parse: ${reportPath}`);
 
-            this.log(`Issues property found. Keys: ${Object.keys(result.issues).join(', ')}`);
-
-            if (!result.issues.issue) {
-                this.log(`No 'issue' property found in result.issues`);
-                return issues;
-            }
-
-            const issueList = Array.isArray(result.issues.issue) 
-                ? result.issues.issue 
-                : [result.issues.issue];
-
-            this.log(`Processing ${issueList.length} issues from XML`);
-
-            for (let i = 0; i < issueList.length; i++) {
-                const issue = issueList[i];
-                this.log(`Processing issue ${i + 1}: ID=${issue.$?.id}, Severity=${issue.$?.severity}`);
-                
-                const locations = issue.location;
-                if (!locations || locations.length === 0) {
-                    this.log(`Issue ${i + 1} has no location, skipping`);
-                    continue;
+        return await new Promise<LintIssue[]>((resolve, reject) => {
+            let currentIssue: { id: string; severity: string; message: string; category?: string; quickfix?: string } | null = null;
+            let locationCaptured = false;
+            const parser: SAXStream = createStream(true, { trim: false, normalize: false });
+            let stream: ReadStream | undefined;
+            let isRejected = false;
+            const pushIssue = (locationAttrs: Record<string, string>) => {
+                if (!currentIssue || !locationAttrs.file) {
+                    return;
                 }
 
-                // Only use the first location to avoid duplicates
-                const location = Array.isArray(locations) ? locations[0] : locations;
-                const attrs = location.$;
+                const filePath = path.isAbsolute(locationAttrs.file)
+                    ? locationAttrs.file
+                    : path.join(workspaceRoot, locationAttrs.file);
 
-                if (!attrs || !attrs.file) {
-                    this.log(`Issue ${i + 1} location has no file attribute, skipping`);
-                    continue;
-                }
-
-                const filePath = path.isAbsolute(attrs.file) 
-                    ? attrs.file 
-                    : path.join(workspaceRoot, attrs.file);
-
-                // Create unique key for deduplication: file:line:column:id:message
-                const uniqueKey = `${filePath}:${attrs.line || '1'}:${attrs.column || '1'}:${issue.$.id}:${issue.$.message}`;
-                
+                const uniqueKey = `${filePath}:${locationAttrs.line || '1'}:${locationAttrs.column || '1'}:${currentIssue.id}:${currentIssue.message}`;
                 if (seenIssues.has(uniqueKey)) {
-                    this.log(`Issue ${i + 1} is a duplicate, skipping`);
-                    continue;
+                    return;
                 }
                 seenIssues.add(uniqueKey);
 
                 const lintIssue: LintIssue = {
                     file: filePath,
-                    line: parseInt(attrs.line || '1', 10),
-                    column: parseInt(attrs.column || '1', 10),
-                    severity: this.mapSeverity(issue.$.severity),
-                    message: issue.$.message || 'Unknown issue',
+                    line: parseInt(locationAttrs.line || '1', 10),
+                    column: parseInt(locationAttrs.column || '1', 10),
+                    severity: this.mapSeverity(currentIssue.severity),
+                    message: currentIssue.message || 'Unknown issue',
                     source: 'Android Lint',
-                    id: issue.$.id || 'UnknownId',
-                    category: issue.$.category || 'General',
-                    quickFix: this.extractQuickFix(issue)
+                    id: currentIssue.id || 'UnknownId',
+                    category: currentIssue.category || 'General',
+                    quickFix: this.extractQuickFix(currentIssue.id, currentIssue.message, currentIssue.quickfix)
                 };
 
-                this.log(`Created lint issue ${i + 1}: ${lintIssue.id} in ${path.basename(lintIssue.file)}:${lintIssue.line}`);
+                this.log(`Created lint issue: ${lintIssue.id} in ${path.basename(lintIssue.file)}:${lintIssue.line}`);
                 issues.push(lintIssue);
-            }
-        } catch (error) {
-            this.log(`Failed to parse XML lint report: ${error}`);
-        }
+            };
 
-        this.log(`Total issues parsed: ${issues.length}`);
-        return issues;
+            parser.on('opentag', (node: QualifiedTag) => {
+                if (node.name === 'issue') {
+                    const attrs = node.attributes as Record<string, string>;
+                    currentIssue = {
+                        id: attrs.id || 'UnknownId',
+                        severity: attrs.severity || 'information',
+                        message: attrs.message || 'Unknown issue',
+                        category: attrs.category,
+                        quickfix: attrs.quickfix
+                    };
+                    locationCaptured = false;
+                    return;
+                }
+
+                if (node.name === 'location' && currentIssue && !locationCaptured) {
+                    const attrs = node.attributes as Record<string, string>;
+                    pushIssue(attrs);
+                    locationCaptured = true;
+                }
+            });
+
+            parser.on('closetag', (tagName: string) => {
+                if (tagName === 'issue') {
+                    currentIssue = null;
+                    locationCaptured = false;
+                }
+            });
+
+            parser.on('error', (error: Error) => {
+                this.log(`Failed to parse XML lint report: ${error}`);
+                if (!isRejected) {
+                    isRejected = true;
+                    parser.removeAllListeners?.();
+                    stream?.destroy(error);
+                    reject(error);
+                }
+            });
+
+            parser.on('end', () => {
+                this.log(`Total issues parsed: ${issues.length}`);
+                if (!isRejected) {
+                    resolve(issues);
+                }
+            });
+
+            stream = createReadStream(reportPath, { encoding: 'utf8' });
+            stream.on('error', (error) => {
+                this.log(`Failed to read lint report: ${error}`);
+                if (!isRejected) {
+                    isRejected = true;
+                    reject(error);
+                }
+            });
+
+            stream.pipe(parser);
+        });
     }
 
     public parseJsonReport(jsonContent: string, workspaceRoot: string): LintIssue[] {
@@ -130,7 +150,7 @@ export class LintReportParser {
                     source: 'Android Lint',
                     id: issue.id || 'UnknownId',
                     category: issue.category || 'General',
-                    quickFix: this.extractQuickFixFromJson(issue)
+                    quickFix: this.extractQuickFix(issue.id, issue.message, issue.quickfix)
                 };
 
                 issues.push(lintIssue);
@@ -158,28 +178,15 @@ export class LintReportParser {
         }
     }
 
-    private extractQuickFix(issue: any): QuickFix | undefined {
-        // Check if issue has a quick fix suggestion
-        if (issue.$ && issue.$.quickfix) {
+    private extractQuickFix(issueId: string, message: string, quickFixReplacement?: string): QuickFix | undefined {
+        if (quickFixReplacement) {
             return {
                 title: 'Apply suggested fix',
-                replacement: issue.$.quickfix
+                replacement: quickFixReplacement
             };
         }
 
-        // Common Android Lint quick fixes based on issue ID
-        return this.getCommonQuickFix(issue.$.id, issue.$.message);
-    }
-
-    private extractQuickFixFromJson(issue: any): QuickFix | undefined {
-        if (issue.quickfix) {
-            return {
-                title: 'Apply suggested fix',
-                replacement: issue.quickfix
-            };
-        }
-
-        return this.getCommonQuickFix(issue.id, issue.message);
+        return this.getCommonQuickFix(issueId, message);
     }
 
     private getCommonQuickFix(issueId: string, message: string): QuickFix | undefined {

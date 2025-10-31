@@ -7,9 +7,10 @@ import { GradleLintRunner } from './gradleLintRunner';
 export class LintManager implements vscode.Disposable {
     private diagnosticProvider: DiagnosticProvider;
     private gradleLintRunner: GradleLintRunner;
-    private runningLints: Map<string, Promise<void>> = new Map();
     private outputChannel: vscode.OutputChannel;
-    private isLinting: boolean = false;
+    private pendingLints: Map<string, vscode.TextDocument> = new Map();
+    private queuePromise: Promise<void> | undefined;
+    private isDisposed = false;
 
     constructor(diagnosticProvider: DiagnosticProvider, outputChannel?: vscode.OutputChannel) {
         this.diagnosticProvider = diagnosticProvider;
@@ -25,29 +26,39 @@ export class LintManager implements vscode.Disposable {
     }
 
     public async lintFile(document: vscode.TextDocument): Promise<void> {
-        const filePath = document.uri.fsPath;
-
-        // Prevent any lint from running if one is already in progress
-        if (this.isLinting) {
-            this.log('⏸️ Lint already in progress, skipping...');
+        if (this.isDisposed) {
             return;
         }
 
-        // Prevent duplicate lint runs for the same file
-        if (this.runningLints.has(filePath)) {
-            return this.runningLints.get(filePath);
+        const filePath = document.uri.fsPath;
+        this.pendingLints.set(filePath, document);
+
+        if (!this.queuePromise) {
+            this.queuePromise = this.processQueue();
         }
 
-        this.isLinting = true;
-        const lintPromise = this.doLintFile(document);
-        this.runningLints.set(filePath, lintPromise);
+        await this.queuePromise;
+    }
 
-        try {
-            await lintPromise;
-        } finally {
-            this.runningLints.delete(filePath);
-            this.isLinting = false;
+    private async processQueue(): Promise<void> {
+        while (this.pendingLints.size > 0) {
+            const iterator = this.pendingLints.entries().next();
+            if (iterator.done) {
+                break;
+            }
+
+            const [filePath, document] = iterator.value;
+            this.pendingLints.delete(filePath);
+
+            try {
+                await this.doLintFile(document);
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                this.log(`❌ Lint failed for ${filePath}: ${errorMsg}`);
+            }
         }
+
+        this.queuePromise = undefined;
     }
 
     private async doLintFile(document: vscode.TextDocument): Promise<void> {
@@ -144,6 +155,10 @@ export class LintManager implements vscode.Disposable {
                     );
 
                     if (token.isCancellationRequested) {
+                        if (this.queuePromise) {
+                            await this.queuePromise;
+                        }
+
                         return;
                     }
 
@@ -167,5 +182,7 @@ export class LintManager implements vscode.Disposable {
 
     public dispose(): void {
         this.gradleLintRunner.dispose();
+        this.pendingLints.clear();
+        this.isDisposed = true;
     }
 }
