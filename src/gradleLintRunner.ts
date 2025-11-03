@@ -111,15 +111,27 @@ export class GradleLintRunner implements vscode.Disposable {
                 throw new Error(errorMsg);
             }
             
-            const compilationErrors = this.parseCompilationErrors(errorOutput, workspaceRoot);
+            const compilationIssues = this.parseCompilationErrors(errorOutput, workspaceRoot);
+            const compilationErrors = compilationIssues.filter(issue => issue.severity === 'error');
+            const compilationWarnings = compilationIssues.filter(issue => issue.severity === 'warning');
             
             if (compilationErrors.length > 0) {
                 this.log(`🔴 Found ${compilationErrors.length} compilation errors in lint output`);
+                // Return only compilation errors, don't try to parse lint report
+                // because the build failed before lint could complete
                 return compilationErrors;
             }
             
             try {
                 const results = await this.parseLintResults(workspaceRoot);
+                
+                // If we found compilation warnings, merge them with lint results
+                if (compilationWarnings.length > 0) {
+                    this.log(`🔴 Found ${compilationWarnings.length} compilation warnings in lint output`);
+                    return [...compilationWarnings, ...results];
+                }
+                
+                return results;
                 
                 // If no results found but gradle failed, it's an actual error
                 const exitCode = error instanceof GradleCommandError ? error.exitCode : error.code;

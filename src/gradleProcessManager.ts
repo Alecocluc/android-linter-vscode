@@ -114,8 +114,13 @@ export class GradleProcessManager implements vscode.Disposable {
             this.log(`⚙️ Running Gradle command: ${commandLabel}`);
         }
 
+        // Quote the executable path if it contains spaces (Windows PowerShell)
+        const quotedExecutable = gradleExecutable.includes(' ') && process.platform === 'win32'
+            ? `"${gradleExecutable}"`
+            : gradleExecutable;
+
         const result = await this.spawnGradleProcess(
-            gradleExecutable,
+            quotedExecutable,
             finalArgs,
             spawnOptions,
             options
