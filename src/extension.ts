@@ -9,6 +9,9 @@ import { AndroidDeviceManager } from './androidDeviceManager';
 import { LogcatManager } from './logcatManager';
 import { AndroidAppLauncher } from './androidLauncher';
 import { AndroidExplorerView } from './androidExplorerView';
+import { DefinitionProvider } from './definitionProvider';
+import { ReferenceProvider } from './referenceProvider';
+import { HoverProvider } from './hoverProvider';
 
 let lintManager: LintManager;
 let diagnosticProvider: DiagnosticProvider;
@@ -196,6 +199,35 @@ export function activate(context: vscode.ExtensionContext) {
             }
         )
     );
+
+    // Register definition provider for "Go to Definition" (Ctrl+Click)
+    const definitionProvider = new DefinitionProvider();
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider(
+            ['kotlin', 'java'],
+            definitionProvider
+        )
+    );
+
+    // Register reference provider for "Find All References"
+    const referenceProvider = new ReferenceProvider();
+    context.subscriptions.push(
+        vscode.languages.registerReferenceProvider(
+            ['kotlin', 'java'],
+            referenceProvider
+        )
+    );
+
+    // Register hover provider to show references in tooltip
+    const hoverProvider = new HoverProvider();
+    context.subscriptions.push(
+        vscode.languages.registerHoverProvider(
+            ['kotlin', 'java'],
+            hoverProvider
+        )
+    );
+
+    outputChannel.appendLine('✅ Registered code navigation providers (Go to Definition, Find References, Hover)');
 
     // Listen to file open events
     context.subscriptions.push(
