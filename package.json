@@ -184,7 +184,7 @@
         },
         "android-linter.logcatLevel": {
           "type": "string",
-          "default": "info",
+          "default": "debug",
           "enum": [
             "verbose",
             "debug",
@@ -193,7 +193,7 @@
             "error",
             "assert"
           ],
-          "description": "Minimum log level when streaming logcat"
+          "description": "Minimum log level when streaming logcat (Debug level shows most app logs)"
         },
         "android-linter.logcatFormat": {
           "type": "string",

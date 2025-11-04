@@ -23,6 +23,10 @@ export class LogcatParser {
             return null;
         }
 
+        // Strip any prefix before the actual log (e.g., "Iunknown" or "Wunknown")
+        // Some devices add a prefix like "[LEVEL][identifier]" before the standard format
+        let cleanLine = line.replace(/^[VDIWEFA][a-zA-Z]*/, '').trim();
+
         // Threadtime format regex
         // Group 1: timestamp (MM-DD HH:MM:SS.mmm)
         // Group 2: PID
@@ -32,7 +36,7 @@ export class LogcatParser {
         // Group 6: Message
         const threadtimePattern = /^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+([^:]+):\s*(.*)$/;
         
-        const match = line.match(threadtimePattern);
+        const match = cleanLine.match(threadtimePattern);
         
         if (!match) {
             // Return unparsed line as a special entry
