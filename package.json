@@ -165,6 +165,11 @@
           "default": true,
           "description": "Enable quick fix suggestions"
         },
+        "android-linter.enableHoverReferences": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show reference count and locations when hovering over symbols (may impact performance on large projects)"
+        },
         "android-linter.verboseLogging": {
           "type": "boolean",
           "default": true,

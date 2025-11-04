@@ -77,49 +77,60 @@ export class HoverProvider implements vscode.HoverProvider {
     private async findReferences(symbol: string): Promise<vscode.Location[] | undefined> {
         const locations: vscode.Location[] = [];
 
-        // Search in Kotlin and Java files
-        const files = await vscode.workspace.findFiles(
-            '**/*.{kt,java}',
-            '**/node_modules/**',
-            200  // Limit for performance
-        );
+        try {
+            // Search in Kotlin and Java files
+            const files = await vscode.workspace.findFiles(
+                '**/*.{kt,java}',
+                '**/node_modules/**',
+                300  // Increased limit for better coverage
+            );
 
-        for (const fileUri of files) {
-            try {
-                const fileContent = await vscode.workspace.fs.readFile(fileUri);
-                const text = Buffer.from(fileContent).toString('utf8');
-                const lines = text.split('\n');
+            for (const fileUri of files) {
+                try {
+                    const fileContent = await vscode.workspace.fs.readFile(fileUri);
+                    const text = Buffer.from(fileContent).toString('utf8');
+                    const lines = text.split('\n');
 
-                for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-                    const line = lines[lineIndex];
-                    
-                    // Find all occurrences of the symbol in this line
-                    let columnIndex = 0;
-                    while ((columnIndex = line.indexOf(symbol, columnIndex)) !== -1) {
-                        // Check if it's a whole word match
-                        const isWholeWord = this.isWholeWordMatch(line, symbol, columnIndex);
+                    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+                        const line = lines[lineIndex];
                         
-                        if (isWholeWord) {
-                            const location = new vscode.Location(
-                                fileUri,
-                                new vscode.Range(
-                                    new vscode.Position(lineIndex, columnIndex),
-                                    new vscode.Position(lineIndex, columnIndex + symbol.length)
-                                )
-                            );
-                            locations.push(location);
+                        // Skip comment lines for performance
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+                            continue;
                         }
                         
-                        columnIndex += symbol.length;
+                        // Find all occurrences of the symbol in this line
+                        let columnIndex = 0;
+                        while ((columnIndex = line.indexOf(symbol, columnIndex)) !== -1) {
+                            // Check if it's a whole word match
+                            const isWholeWord = this.isWholeWordMatch(line, symbol, columnIndex);
+                            
+                            if (isWholeWord) {
+                                const location = new vscode.Location(
+                                    fileUri,
+                                    new vscode.Range(
+                                        new vscode.Position(lineIndex, columnIndex),
+                                        new vscode.Position(lineIndex, columnIndex + symbol.length)
+                                    )
+                                );
+                                locations.push(location);
+                            }
+                            
+                            columnIndex += symbol.length;
+                        }
                     }
+                } catch (error) {
+                    // Skip files that can't be read
+                    continue;
                 }
-            } catch (error) {
-                // Skip files that can't be read
-                continue;
             }
-        }
 
-        return locations.length > 0 ? locations : undefined;
+            return locations.length > 0 ? locations : undefined;
+        } catch (error) {
+            console.error('Error finding references:', error);
+            return undefined;
+        }
     }
 
     private isWholeWordMatch(line: string, word: string, index: number): boolean {

@@ -218,16 +218,21 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // Register hover provider to show references in tooltip
-    const hoverProvider = new HoverProvider();
-    context.subscriptions.push(
-        vscode.languages.registerHoverProvider(
-            ['kotlin', 'java'],
-            hoverProvider
-        )
-    );
-
-    outputChannel.appendLine('✅ Registered code navigation providers (Go to Definition, Find References, Hover)');
+    // Register hover provider to show references in tooltip (optional, disabled by default)
+    const enableHover = vscode.workspace.getConfiguration('android-linter').get<boolean>('enableHoverReferences', false);
+    if (enableHover) {
+        const hoverProvider = new HoverProvider();
+        context.subscriptions.push(
+            vscode.languages.registerHoverProvider(
+                ['kotlin', 'java'],
+                hoverProvider
+            )
+        );
+        outputChannel.appendLine('✅ Registered code navigation providers (Go to Definition, Find References, Hover)');
+    } else {
+        outputChannel.appendLine('✅ Registered code navigation providers (Go to Definition, Find References)');
+        outputChannel.appendLine('💡 Tip: Enable "android-linter.enableHoverReferences" to show references on hover');
+    }
 
     // Listen to file open events
     context.subscriptions.push(
