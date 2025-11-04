@@ -183,8 +183,8 @@ export class LogcatWebviewPanel {
         }
 
         body {
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
+            font-family: var(--vscode-font-family), 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-size: 13px;
             background-color: var(--vscode-editor-background);
             color: var(--vscode-editor-foreground);
             overflow: hidden;
@@ -195,153 +195,298 @@ export class LogcatWebviewPanel {
 
         #toolbar {
             display: flex;
-            gap: 8px;
-            padding: 8px;
-            background-color: var(--vscode-sideBar-background);
-            border-bottom: 1px solid var(--vscode-panel-border);
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--vscode-sideBar-background);
+            border-bottom: 1px solid var(--vscode-widget-border);
             flex-shrink: 0;
             flex-wrap: wrap;
             align-items: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
         }
 
         .toolbar-group {
             display: flex;
-            gap: 4px;
+            gap: 6px;
             align-items: center;
+        }
+
+        .toolbar-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 4px;
         }
 
         .toolbar-divider {
             width: 1px;
-            height: 20px;
-            background-color: var(--vscode-panel-border);
+            height: 24px;
+            background-color: var(--vscode-widget-border);
             margin: 0 4px;
+            opacity: 0.5;
         }
 
         button {
-            padding: 4px 12px;
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
+            padding: 6px 14px;
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: 1px solid transparent;
             cursor: pointer;
-            border-radius: 2px;
-            font-size: 11px;
-            transition: background-color 0.2s;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
         }
 
         button:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.primary {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+
+        button.primary:hover {
             background-color: var(--vscode-button-hoverBackground);
         }
 
         button.active {
-            background-color: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
+            background-color: var(--vscode-inputOption-activeBackground);
+            color: var(--vscode-inputOption-activeForeground);
+            border-color: var(--vscode-inputOption-activeBorder);
+            box-shadow: 0 0 0 1px var(--vscode-focusBorder);
         }
 
         button.level-btn {
-            font-weight: bold;
-            min-width: 32px;
+            font-weight: 700;
+            min-width: 36px;
+            padding: 6px 10px;
+            justify-content: center;
+            font-family: 'Consolas', 'Monaco', monospace;
         }
 
-        button.level-V { color: #808080; }
-        button.level-D { color: #0066CC; }
-        button.level-I { color: #00AA00; }
-        button.level-W { color: #FF8800; }
-        button.level-E { color: #FF0000; }
+        button.level-V { 
+            color: #888;
+            border-color: #888;
+        }
+        button.level-V.active { 
+            background-color: rgba(136, 136, 136, 0.2);
+            color: #aaa;
+        }
+
+        button.level-D { 
+            color: #2196F3;
+            border-color: #2196F3;
+        }
+        button.level-D.active { 
+            background-color: rgba(33, 150, 243, 0.2);
+            color: #42A5F5;
+        }
+
+        button.level-I { 
+            color: #4CAF50;
+            border-color: #4CAF50;
+        }
+        button.level-I.active { 
+            background-color: rgba(76, 175, 80, 0.2);
+            color: #66BB6A;
+        }
+
+        button.level-W { 
+            color: #FF9800;
+            border-color: #FF9800;
+        }
+        button.level-W.active { 
+            background-color: rgba(255, 152, 0, 0.2);
+            color: #FFA726;
+        }
+
+        button.level-E { 
+            color: #F44336;
+            border-color: #F44336;
+        }
+        button.level-E.active { 
+            background-color: rgba(244, 67, 54, 0.2);
+            color: #EF5350;
+        }
 
         input[type="text"] {
-            padding: 4px 8px;
+            padding: 6px 12px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
-            font-size: 11px;
-            min-width: 150px;
+            border-radius: 4px;
+            font-size: 12px;
+            min-width: 200px;
+            transition: all 0.15s ease;
         }
 
         input[type="text"]:focus {
-            outline: 1px solid var(--vscode-focusBorder);
+            outline: none;
+            border-color: var(--vscode-focusBorder);
+            box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+        }
+
+        input[type="text"]::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+            opacity: 0.7;
         }
 
         #stats {
-            font-size: 10px;
+            font-size: 11px;
             color: var(--vscode-descriptionForeground);
             margin-left: auto;
             display: flex;
-            gap: 12px;
+            gap: 16px;
+            font-weight: 500;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 10px;
+        }
+
+        .stat-badge.errors {
+            background-color: rgba(244, 67, 54, 0.2);
+            color: #F44336;
+        }
+
+        .stat-badge.warnings {
+            background-color: rgba(255, 152, 0, 0.2);
+            color: #FF9800;
+        }
+
+        .stat-badge.total {
+            background-color: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
         }
 
         #logs-container {
             flex: 1;
             overflow-y: auto;
-            padding: 4px;
+            padding: 8px;
+            background-color: var(--vscode-editor-background);
+        }
+
+        #logs-container::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        #logs-container::-webkit-scrollbar-track {
+            background: var(--vscode-scrollbarSlider-background);
+        }
+
+        #logs-container::-webkit-scrollbar-thumb {
+            background: var(--vscode-scrollbarSlider-hoverBackground);
+            border-radius: 5px;
         }
 
         .log-entry {
-            padding: 2px 4px;
-            border-left: 3px solid transparent;
+            padding: 6px 12px;
+            border-left: 4px solid transparent;
             white-space: pre-wrap;
             word-wrap: break-word;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            line-height: 1.4;
+            font-family: 'Consolas', 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 2px;
+            border-radius: 2px;
+            transition: all 0.1s ease;
         }
 
         .log-entry:hover {
             background-color: var(--vscode-list-hoverBackground);
+            border-left-width: 5px;
+            padding-left: 11px;
         }
 
         .log-entry.level-V {
-            border-left-color: #808080;
-            color: #A0A0A0;
+            border-left-color: #888;
+            color: #999;
         }
 
         .log-entry.level-D {
-            border-left-color: #0066CC;
-            color: #4DA6FF;
+            border-left-color: #2196F3;
+            color: #64B5F6;
         }
 
         .log-entry.level-I {
-            border-left-color: #00AA00;
+            border-left-color: #4CAF50;
             color: var(--vscode-editor-foreground);
         }
 
         .log-entry.level-W {
-            border-left-color: #FF8800;
-            color: #FFA726;
+            border-left-color: #FF9800;
+            color: #FFB74D;
+            background-color: rgba(255, 152, 0, 0.05);
         }
 
         .log-entry.level-E {
-            border-left-color: #FF0000;
-            color: #FF5252;
+            border-left-color: #F44336;
+            color: #EF5350;
             font-weight: 500;
+            background-color: rgba(244, 67, 54, 0.08);
         }
 
         .log-entry.level-F {
-            border-left-color: #AA0000;
-            color: #FF5252;
-            font-weight: bold;
+            border-left-color: #C62828;
+            color: #EF5350;
+            font-weight: 700;
+            background-color: rgba(198, 40, 40, 0.12);
         }
 
         .log-timestamp {
             color: var(--vscode-descriptionForeground);
-            margin-right: 8px;
+            opacity: 0.7;
+            margin-right: 10px;
+            font-size: 11px;
         }
 
         .log-level {
-            font-weight: bold;
-            margin-right: 8px;
-            min-width: 12px;
+            font-weight: 700;
+            margin-right: 10px;
+            min-width: 14px;
             display: inline-block;
+            text-align: center;
         }
 
         .log-tag {
             color: var(--vscode-symbolIcon-classForeground);
-            margin-right: 8px;
+            background-color: rgba(100, 100, 100, 0.15);
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-right: 10px;
             cursor: pointer;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 11px;
+            transition: all 0.15s ease;
         }
 
         .log-tag:hover {
-            text-decoration: underline;
+            background-color: rgba(100, 100, 100, 0.25);
+            transform: translateY(-1px);
         }
 
         .log-message {
@@ -355,7 +500,19 @@ export class LogcatWebviewPanel {
             justify-content: center;
             height: 100%;
             color: var(--vscode-descriptionForeground);
-            gap: 8px;
+            gap: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         #empty-state.hidden {
@@ -363,23 +520,44 @@ export class LogcatWebviewPanel {
         }
 
         .icon {
-            font-size: 48px;
-            opacity: 0.5;
+            font-size: 64px;
+            opacity: 0.4;
+            filter: grayscale(0.3);
+        }
+
+        .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .empty-subtitle {
+            font-size: 12px;
+            opacity: 0.7;
         }
     </style>
 </head>
 <body>
     <div id="toolbar">
         <div class="toolbar-group">
-            <button id="clear-btn" title="Clear logs">Clear</button>
-            <button id="pause-btn" title="Pause/Resume">Pause</button>
-            <button id="autoscroll-btn" class="active" title="Toggle auto-scroll">Auto-scroll</button>
+            <button id="clear-btn" class="primary" title="Clear all logs">
+                <span>🗑️</span>
+                Clear
+            </button>
+            <button id="pause-btn" title="Pause/Resume log capture">
+                <span>⏸️</span>
+                Pause
+            </button>
+            <button id="autoscroll-btn" class="active" title="Auto-scroll to latest logs">
+                <span>⬇️</span>
+                Auto-scroll
+            </button>
         </div>
 
         <div class="toolbar-divider"></div>
 
         <div class="toolbar-group">
-            <span style="font-size: 10px; color: var(--vscode-descriptionForeground);">Level:</span>
+            <span class="toolbar-label">Filter</span>
             <button class="level-btn level-V" data-level="V" title="Verbose">V</button>
             <button class="level-btn level-D" data-level="D" title="Debug">D</button>
             <button class="level-btn level-I" data-level="I" title="Info">I</button>
@@ -390,28 +568,43 @@ export class LogcatWebviewPanel {
         <div class="toolbar-divider"></div>
 
         <div class="toolbar-group">
-            <input type="text" id="search-input" placeholder="Search logs..." />
-            <button id="clear-filter-btn" title="Clear filters">Clear Filter</button>
+            <input type="text" id="search-input" placeholder="🔍 Search logs..." />
+            <button id="clear-filter-btn" title="Clear all filters">
+                <span>✖️</span>
+                Clear Filter
+            </button>
         </div>
 
         <div class="toolbar-divider"></div>
 
         <div class="toolbar-group">
-            <button id="copy-btn" title="Copy all visible logs">Copy</button>
+            <button id="copy-btn" title="Copy all visible logs to clipboard">
+                <span>📋</span>
+                Copy
+            </button>
         </div>
 
         <div id="stats">
-            <span id="log-count">0 logs</span>
-            <span id="error-count">0 errors</span>
-            <span id="warning-count">0 warnings</span>
+            <div class="stat-item">
+                <span class="stat-badge total" id="log-count">0</span>
+                <span>logs</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-badge errors" id="error-count">0</span>
+                <span>errors</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-badge warnings" id="warning-count">0</span>
+                <span>warnings</span>
+            </div>
         </div>
     </div>
 
     <div id="logs-container">
         <div id="empty-state">
-            <div class="icon"></div>
-            <div>Waiting for logcat output...</div>
-            <div style="font-size: 10px;">Start logcat to see logs here</div>
+            <div class="icon">📱</div>
+            <div class="empty-title">Waiting for logcat output</div>
+            <div class="empty-subtitle">Start logcat from the Android Explorer to see logs here</div>
         </div>
     </div>
 
@@ -439,11 +632,11 @@ export class LogcatWebviewPanel {
             if (isPaused) {
                 vscode.postMessage({ type: 'resume' });
                 isPaused = false;
-                pauseBtn.textContent = 'Pause';
+                pauseBtn.innerHTML = '<span>⏸️</span>Pause';
             } else {
                 vscode.postMessage({ type: 'pause' });
                 isPaused = true;
-                pauseBtn.textContent = 'Resume';
+                pauseBtn.innerHTML = '<span>▶️</span>Resume';
             }
         });
 
@@ -555,7 +748,7 @@ export class LogcatWebviewPanel {
         function clearLogs() {
             logs = [];
             stats = { total: 0, errors: 0, warnings: 0 };
-            logsContainer.innerHTML = '<div id="empty-state"><div class="icon">📱</div><div>Logs cleared</div></div>';
+            logsContainer.innerHTML = '<div id="empty-state"><div class="icon">🧹</div><div class="empty-title">Logs cleared</div><div class="empty-subtitle">New logs will appear here</div></div>';
             emptyState = document.getElementById('empty-state');
             updateStatsDisplay();
         }
@@ -566,7 +759,7 @@ export class LogcatWebviewPanel {
             stats = { total: 0, errors: 0, warnings: 0 };
             
             if (newLogs.length === 0) {
-                logsContainer.innerHTML = '<div id="empty-state"><div class="icon">🔍</div><div>No logs match the current filter</div></div>';
+                logsContainer.innerHTML = '<div id="empty-state"><div class="icon">🔍</div><div class="empty-title">No logs match the filter</div><div class="empty-subtitle">Try adjusting your filter criteria</div></div>';
             } else {
                 newLogs.forEach(log => {
                     const entry = createLogElement(log);
@@ -583,7 +776,7 @@ export class LogcatWebviewPanel {
         function updateState(state) {
             if (state.isPaused !== undefined) {
                 isPaused = state.isPaused;
-                pauseBtn.textContent = isPaused ? '▶️ Resume' : '⏸️ Pause';
+                pauseBtn.innerHTML = isPaused ? '<span>▶️</span>Resume' : '<span>⏸️</span>Pause';
             }
             if (state.autoScroll !== undefined) {
                 autoScroll = state.autoScroll;
@@ -602,9 +795,9 @@ export class LogcatWebviewPanel {
         }
 
         function updateStatsDisplay() {
-            document.getElementById('log-count').textContent = \`\${stats.total} logs\`;
-            document.getElementById('error-count').textContent = \`\${stats.errors} errors\`;
-            document.getElementById('warning-count').textContent = \`\${stats.warnings} warnings\`;
+            document.getElementById('log-count').textContent = stats.total;
+            document.getElementById('error-count').textContent = stats.errors;
+            document.getElementById('warning-count').textContent = stats.warnings;
         }
 
         function escapeHtml(text) {
