@@ -115,6 +115,24 @@
           "default": "./gradlew",
           "description": "Path to gradlew executable (relative to workspace root)"
         },
+        "android-linter.lintScope": {
+          "type": "string",
+          "default": "module",
+          "enum": [
+            "project",
+            "module"
+          ],
+          "enumDescriptions": [
+            "Run lint on entire project (./gradlew lint)",
+            "Run lint on specific module only (./gradlew :moduleName:lint)"
+          ],
+          "description": "Scope of lint execution: 'project' for full project or 'module' for specific module"
+        },
+        "android-linter.lintModule": {
+          "type": "string",
+          "default": "app",
+          "description": "Module name to lint when lintScope is set to 'module' (e.g., 'app')"
+        },
         "android-linter.showSeverity": {
           "type": "array",
           "default": [

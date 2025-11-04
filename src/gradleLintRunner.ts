@@ -50,13 +50,23 @@ export class GradleLintRunner implements vscode.Disposable {
     ): Promise<LintIssue[]> {
         const config = vscode.workspace.getConfiguration('android-linter');
         const timeout = config.get<number>('lintTimeout') || 600000;
+        const lintScope = config.get<string>('lintScope') || 'module';
+        const lintModule = config.get<string>('lintModule') || 'app';
 
-        this.log(`🔧 Starting Gradle lint task`);
+        // Determine the lint task based on scope
+        let lintTask: string;
+        if (lintScope === 'project') {
+            lintTask = 'lint';
+            this.log(`🔧 Starting Gradle lint task (full project)`);
+        } else {
+            lintTask = `:${lintModule}:lint`;
+            this.log(`🔧 Starting Gradle lint task (module: ${lintModule})`);
+        }
 
         try {
             const result = await this.gradleManager.runCommand(
                 workspaceRoot,
-                ['lint', '--continue'],
+                [lintTask, '--continue'],
                 {
                     timeout,
                     cancellationToken
@@ -153,8 +163,13 @@ export class GradleLintRunner implements vscode.Disposable {
     }
 
     private async parseLintResults(workspaceRoot: string): Promise<LintIssue[]> {
+        const config = vscode.workspace.getConfiguration('android-linter');
+        const lintModule = config.get<string>('lintModule') || 'app';
+
         // Look for lint report XML files
         const possibleReportPaths = [
+            path.join(workspaceRoot, lintModule, 'build', 'reports', 'lint-results.xml'),
+            path.join(workspaceRoot, lintModule, 'build', 'reports', 'lint-results-debug.xml'),
             path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results.xml'),
             path.join(workspaceRoot, 'build', 'reports', 'lint-results.xml'),
             path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results-debug.xml'),
@@ -178,12 +193,18 @@ export class GradleLintRunner implements vscode.Disposable {
         }
 
         // If no XML report found, check for JSON or SARIF
-        const jsonReportPath = path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results.json');
-        this.log(`   Checking: ${jsonReportPath}`);
-        if (fs.existsSync(jsonReportPath)) {
-            this.log(`   ✅ Found JSON report: ${jsonReportPath}`);
-            const jsonContent = fs.readFileSync(jsonReportPath, 'utf-8');
-            return this.parser.parseJsonReport(jsonContent, workspaceRoot);
+        const possibleJsonPaths = [
+            path.join(workspaceRoot, lintModule, 'build', 'reports', 'lint-results.json'),
+            path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results.json'),
+        ];
+
+        for (const jsonReportPath of possibleJsonPaths) {
+            this.log(`   Checking: ${jsonReportPath}`);
+            if (fs.existsSync(jsonReportPath)) {
+                this.log(`   ✅ Found JSON report: ${jsonReportPath}`);
+                const jsonContent = fs.readFileSync(jsonReportPath, 'utf-8');
+                return this.parser.parseJsonReport(jsonContent, workspaceRoot);
+            }
         }
 
         // No reports found
