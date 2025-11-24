@@ -53,20 +53,40 @@ export class GradleLintRunner implements vscode.Disposable {
         const lintScope = config.get<string>('lintScope') || 'module';
         const lintModule = config.get<string>('lintModule') || 'app';
 
-        // Determine the lint task based on scope
+        // Optimization settings
+        const lintTaskName = config.get<string>('lintTask') || 'lintDebug';
+        const useOffline = config.get<boolean>('lintOffline', false);
+        const fastMode = config.get<boolean>('lintFastMode', true);
+
+        // Determine the full lint task
         let lintTask: string;
         if (lintScope === 'project') {
-            lintTask = 'lint';
-            this.log(`🔧 Starting Gradle lint task (full project)`);
+            lintTask = lintTaskName;
+            this.log(`🔧 Starting Gradle lint task: ${lintTask} (full project)`);
         } else {
-            lintTask = `:${lintModule}:lint`;
-            this.log(`🔧 Starting Gradle lint task (module: ${lintModule})`);
+            lintTask = `:${lintModule}:${lintTaskName}`;
+            this.log(`🔧 Starting Gradle lint task: ${lintTask} (module: ${lintModule})`);
         }
+
+        const args = [lintTask];
+
+        // Add optimization flags
+        if (useOffline) {
+            args.push('--offline');
+        }
+
+        if (fastMode) {
+            // these properties speed up lint significantly by skipping downstream dependency checks
+            args.push('-Pandroid.lintOptions.checkDependencies=false');
+        }
+
+        // Always continue on error so we get the report
+        args.push('--continue');
 
         try {
             const result = await this.gradleManager.runCommand(
                 workspaceRoot,
-                [lintTask, '--continue'],
+                args,
                 {
                     timeout,
                     cancellationToken
@@ -85,7 +105,7 @@ export class GradleLintRunner implements vscode.Disposable {
                 return [];
             }
 
-            return await this.parseLintResults(workspaceRoot);
+            return await this.parseLintResults(workspaceRoot, lintTaskName);
         } catch (error: any) {
             // Lint command may exit with non-zero even when successful
             // if it finds issues, so we still try to parse results
@@ -133,7 +153,7 @@ export class GradleLintRunner implements vscode.Disposable {
             }
             
             try {
-                const results = await this.parseLintResults(workspaceRoot);
+                const results = await this.parseLintResults(workspaceRoot, lintTaskName);
                 
                 // If we found compilation warnings, merge them with lint results
                 if (compilationWarnings.length > 0) {
@@ -154,7 +174,7 @@ export class GradleLintRunner implements vscode.Disposable {
                 }
                 
                 return results;
-            } catch (parseError) {
+            } catch (parseError: any) {
                 const errorMsg = `Lint execution failed: ${error.message || String(error)}`;
                 vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
                 throw new Error(errorMsg);
@@ -162,12 +182,28 @@ export class GradleLintRunner implements vscode.Disposable {
         }
     }
 
-    private async parseLintResults(workspaceRoot: string): Promise<LintIssue[]> {
+    private async parseLintResults(workspaceRoot: string, lintTaskName?: string): Promise<LintIssue[]> {
         const config = vscode.workspace.getConfiguration('android-linter');
         const lintModule = config.get<string>('lintModule') || 'app';
 
+        // Try to derive report name from task name
+        // e.g. lintDebug -> lint-results-debug.xml
+        let derivedReportName = 'lint-results.xml';
+        if (lintTaskName && lintTaskName.toLowerCase().startsWith('lint')) {
+            const variant = lintTaskName.substring(4).toLowerCase();
+            if (variant) {
+                derivedReportName = `lint-results-${variant}.xml`;
+            }
+        }
+
         // Look for lint report XML files
         const possibleReportPaths = [
+            // Prioritize the specific variant report
+            path.join(workspaceRoot, lintModule, 'build', 'reports', derivedReportName),
+            path.join(workspaceRoot, 'app', 'build', 'reports', derivedReportName),
+            path.join(workspaceRoot, 'build', 'reports', derivedReportName),
+
+            // Fallbacks
             path.join(workspaceRoot, lintModule, 'build', 'reports', 'lint-results.xml'),
             path.join(workspaceRoot, lintModule, 'build', 'reports', 'lint-results-debug.xml'),
             path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results.xml'),
@@ -175,11 +211,11 @@ export class GradleLintRunner implements vscode.Disposable {
             path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results-debug.xml'),
         ];
 
-        this.log(`🔍 Looking for lint reports...`);
+        this.log(`🔍 Looking for lint reports (expecting: ${derivedReportName})...`);
 
         // Try to find and parse the first available report
         for (const reportPath of possibleReportPaths) {
-            this.log(`   Checking: ${reportPath}`);
+            // this.log(`   Checking: ${reportPath}`); // Too verbose
             if (fs.existsSync(reportPath)) {
                 this.log(`   ✅ Found XML report: ${reportPath}`);
                 const stats = fs.statSync(reportPath);

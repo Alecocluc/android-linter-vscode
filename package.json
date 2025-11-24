@@ -133,6 +133,21 @@
           "default": "app",
           "description": "Module name to lint when lintScope is set to 'module' (e.g., 'app')"
         },
+        "android-linter.lintTask": {
+          "type": "string",
+          "default": "lintDebug",
+          "description": "The Gradle lint task to run (e.g. 'lint', 'lintDebug', 'lintRelease'). 'lintDebug' is usually faster."
+        },
+        "android-linter.lintOffline": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run Gradle in offline mode (--offline) to speed up linting if dependencies are already downloaded."
+        },
+        "android-linter.lintFastMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add optimization flags (e.g. checkDependencies=false) to speed up linting."
+        },
         "android-linter.showSeverity": {
           "type": "array",
           "default": [
