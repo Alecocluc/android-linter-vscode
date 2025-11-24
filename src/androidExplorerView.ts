@@ -180,35 +180,15 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
     private getActionNodes(): Promise<TreeNode[]> {
         const nodes: TreeNode[] = [];
 
+        // Primary Actions
         const runNode = new TreeNode('Run App', 'action', vscode.TreeItemCollapsibleState.None);
         runNode.iconPath = new vscode.ThemeIcon('play', new vscode.ThemeColor('testing.iconPassed'));
         runNode.command = {
             command: 'android-linter.launchOnDevice',
             title: 'Run App'
         };
-        runNode.tooltip = '▶️ Build, install, and launch the app on the selected device';
-        runNode.description = 'Build & Run';
+        runNode.tooltip = 'Build & Run (Install Debug)';
         nodes.push(runNode);
-
-        const relaunchNode = new TreeNode('Relaunch App', 'action', vscode.TreeItemCollapsibleState.None);
-        relaunchNode.iconPath = new vscode.ThemeIcon('debug-restart', new vscode.ThemeColor('symbolIcon.variableForeground'));
-        relaunchNode.command = {
-            command: 'android-linter.relaunchApp',
-            title: 'Relaunch App'
-        };
-        relaunchNode.tooltip = '🔄 Force stop the current app and relaunch it immediately';
-        relaunchNode.description = 'Force restart';
-        nodes.push(relaunchNode);
-
-        const debugNode = new TreeNode('Debug App', 'action', vscode.TreeItemCollapsibleState.None);
-        debugNode.iconPath = new vscode.ThemeIcon('bug', new vscode.ThemeColor('symbolIcon.functionForeground'));
-        debugNode.command = {
-            command: 'android-linter.debugApp',
-            title: 'Debug App'
-        };
-        debugNode.tooltip = '🐛 Attach debugger to the running app (coming soon)';
-        debugNode.description = 'Coming soon';
-        nodes.push(debugNode);
 
         const stopNode = new TreeNode('Stop App', 'action', vscode.TreeItemCollapsibleState.None);
         stopNode.iconPath = new vscode.ThemeIcon('stop-circle', new vscode.ThemeColor('problemsErrorIcon.foreground'));
@@ -216,12 +196,10 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
             command: 'android-linter.stopApp',
             title: 'Stop App'
         };
-        stopNode.tooltip = '⏹️ Force stop the running application';
-        stopNode.description = 'Force stop';
+        stopNode.tooltip = 'Force Stop Application';
         nodes.push(stopNode);
 
-
-        // Start/Stop Logcat
+        // Logcat Toggle
         if (this.isLogcatRunning) {
             const stopLogcatNode = new TreeNode(
                 'Stop Logcat',
@@ -229,8 +207,7 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
                 vscode.TreeItemCollapsibleState.None
             );
             stopLogcatNode.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.red'));
-            stopLogcatNode.description = '● Recording';
-            stopLogcatNode.tooltip = '⏹️ Stop capturing device logs';
+            stopLogcatNode.description = 'Recording';
             stopLogcatNode.command = {
                 command: 'android-linter.stopLogcat',
                 title: 'Stop Logcat'
@@ -238,13 +215,11 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
             nodes.push(stopLogcatNode);
         } else {
             const startLogcatNode = new TreeNode(
-                'Start Logcat',
+                'Open Logcat',
                 'action',
                 vscode.TreeItemCollapsibleState.None
             );
-            startLogcatNode.iconPath = new vscode.ThemeIcon('output', new vscode.ThemeColor('symbolIcon.arrayForeground'));
-            startLogcatNode.description = 'View logs';
-            startLogcatNode.tooltip = '📊 Start streaming real-time device logs';
+            startLogcatNode.iconPath = new vscode.ThemeIcon('output');
             startLogcatNode.command = {
                 command: 'android-linter.showLogcat',
                 title: 'Start Logcat'
@@ -252,35 +227,35 @@ export class AndroidExplorerView implements vscode.TreeDataProvider<TreeNode> {
             nodes.push(startLogcatNode);
         }
 
-        // Lint Project
-        const lintNode = new TreeNode(
-            'Lint Entire Project',
-            'action',
-            vscode.TreeItemCollapsibleState.None
-        );
-        lintNode.iconPath = new vscode.ThemeIcon('search-fuzzy', new vscode.ThemeColor('symbolIcon.constantForeground'));
-        lintNode.description = 'Run analysis';
-        lintNode.tooltip = '🔍 Run Android lint analysis on the entire project';
-        lintNode.command = {
-            command: 'android-linter.lintProject',
-            title: 'Lint Project'
+        // Wireless Debugging Sub-section (using visual separator logic or just appending)
+        // Since TreeView doesn't support true separators, we just list them.
+        
+        const connectWifiNode = new TreeNode('Connect via Wi-Fi', 'action', vscode.TreeItemCollapsibleState.None);
+        connectWifiNode.iconPath = new vscode.ThemeIcon('rss');
+        connectWifiNode.description = 'IP:Port';
+        connectWifiNode.command = {
+            command: 'android-linter.adbConnect',
+            title: 'Connect via Wi-Fi'
         };
-        nodes.push(lintNode);
+        nodes.push(connectWifiNode);
 
-        // Clear Diagnostics
-        const clearNode = new TreeNode(
-            'Clear Lint Results',
-            'action',
-            vscode.TreeItemCollapsibleState.None
-        );
-        clearNode.iconPath = new vscode.ThemeIcon('clear-all', new vscode.ThemeColor('disabledForeground'));
-        clearNode.description = 'Reset';
-        clearNode.tooltip = '🧹 Clear all lint diagnostics from the problems panel';
-        clearNode.command = {
+        const pairWifiNode = new TreeNode('Pair via Wi-Fi', 'action', vscode.TreeItemCollapsibleState.None);
+        pairWifiNode.iconPath = new vscode.ThemeIcon('link');
+        pairWifiNode.description = 'Pairing Code';
+        pairWifiNode.command = {
+            command: 'android-linter.adbPair',
+            title: 'Pair via Wi-Fi'
+        };
+        nodes.push(pairWifiNode);
+
+        // Secondary / Maintenance Actions
+        const cleanNode = new TreeNode('Clear Lint Results', 'action', vscode.TreeItemCollapsibleState.None);
+        cleanNode.iconPath = new vscode.ThemeIcon('clear-all');
+        cleanNode.command = {
             command: 'android-linter.clearDiagnostics',
             title: 'Clear'
         };
-        nodes.push(clearNode);
+        nodes.push(cleanNode);
 
         return Promise.resolve(nodes);
     }

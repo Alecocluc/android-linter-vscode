@@ -12,6 +12,8 @@ import { AndroidExplorerView } from './androidExplorerView';
 import { DefinitionProvider } from './definitionProvider';
 import { ReferenceProvider } from './referenceProvider';
 import { HoverProvider } from './hoverProvider';
+import { GradleTaskProvider } from './gradleTaskProvider';
+import { AdbWirelessManager } from './adbWirelessManager';
 
 let lintManager: LintManager;
 let diagnosticProvider: DiagnosticProvider;
@@ -20,6 +22,8 @@ let deviceManager: AndroidDeviceManager;
 let logcatManager: LogcatManager;
 let appLauncher: AndroidAppLauncher;
 let androidExplorerView: AndroidExplorerView;
+let gradleTaskProvider: GradleTaskProvider;
+let adbWirelessManager: AdbWirelessManager;
 let runStatusBarItem: vscode.StatusBarItem;
 
 function log(outputChannel: vscode.OutputChannel, message: string) {
@@ -56,11 +60,22 @@ export function activate(context: vscode.ExtensionContext) {
     appLauncher = new AndroidAppLauncher(gradleProcessManager, deviceManager, logcatManager, outputChannel);
     context.subscriptions.push(appLauncher);
 
+    adbWirelessManager = new AdbWirelessManager(outputChannel, deviceManager.getAdbPath());
+
     // Initialize Android Explorer View
     androidExplorerView = new AndroidExplorerView(deviceManager, logcatManager, gradleProcessManager, context);
     context.subscriptions.push(
         vscode.window.registerTreeDataProvider('androidExplorer', androidExplorerView)
     );
+
+    // Initialize Gradle Task Provider
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (workspaceFolder) {
+        gradleTaskProvider = new GradleTaskProvider(gradleProcessManager, workspaceFolder);
+        context.subscriptions.push(
+            vscode.window.registerTreeDataProvider('gradleTasks', gradleTaskProvider)
+        );
+    }
 
     // Connect app launcher to explorer view for status updates
     appLauncher.setAppIdCallback((appId) => {
@@ -177,6 +192,58 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Gradle Task Commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.runGradleTask', async (taskName: string) => {
+            if (!workspaceFolder) return;
+            
+            // If no task name passed (e.g. from palette), prompt for it
+            const task = taskName || await vscode.window.showInputBox({
+                placeHolder: 'assembleDebug',
+                prompt: 'Enter the Gradle task to run',
+            });
+
+            if (!task) return;
+
+            androidExplorerView.setGradleRunning(true);
+            try {
+                const terminal = vscode.window.createTerminal(`Gradle: ${task}`);
+                terminal.show();
+                
+                // Use the proper wrapper based on platform
+                const wrapper = process.platform === 'win32' ? '.\\gradlew.bat' : './gradlew';
+                terminal.sendText(`${wrapper} ${task}`);
+                
+            } finally {
+                androidExplorerView.setGradleRunning(false);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.syncProject', async () => {
+            if (gradleTaskProvider) {
+                await gradleTaskProvider.refreshTasks();
+                vscode.window.showInformationMessage('Gradle Project Synced & Tasks Refreshed');
+            }
+        })
+    );
+
+    // ADB Wireless Commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.adbConnect', async () => {
+            await adbWirelessManager.connect();
+            // Refresh devices after connection attempt
+            setTimeout(() => androidExplorerView.refreshDevices(), 2000);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('android-linter.adbPair', async () => {
+            await adbWirelessManager.pair();
+        })
+    );
+
     // Optional status bar item (now we have the Android Explorer panel)
     const showStatusBar = vscode.workspace.getConfiguration('android-linter').get<boolean>('showStatusBar', false);
     if (showStatusBar) {
@@ -253,6 +320,17 @@ export function activate(context: vscode.ExtensionContext) {
             if (config.get<boolean>('lintOnSave') && isAndroidFile(document)) {
                 await lintManager.lintFile(document);
             }
+
+            // Auto-sync on build.gradle changes?
+            if (document.fileName.endsWith('.gradle') || document.fileName.endsWith('.gradle.kts')) {
+               const selection = await vscode.window.showInformationMessage(
+                   'Gradle file changed. Sync project?',
+                   'Sync', 'Later'
+               );
+               if (selection === 'Sync') {
+                   vscode.commands.executeCommand('android-linter.syncProject');
+               }
+            }
         })
     );
 
@@ -285,6 +363,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.window.showInformationMessage('Android Linter is ready!');
 }
+
 
 export function deactivate() {
     if (lintManager) {

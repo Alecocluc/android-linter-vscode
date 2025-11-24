@@ -41,6 +41,11 @@
           "id": "androidExplorer",
           "name": "Android Explorer",
           "icon": "images/android-icon.svg"
+        },
+        {
+          "id": "gradleTasks",
+          "name": "Gradle Tasks",
+          "icon": "images/android-icon.svg"
         }
       ]
     },
@@ -81,6 +86,23 @@
       {
         "command": "android-linter.clearLogcat",
         "title": "Android: Clear Logcat"
+      },
+      {
+        "command": "android-linter.runGradleTask",
+        "title": "Android: Run Gradle Task"
+      },
+      {
+        "command": "android-linter.syncProject",
+        "title": "Android: Sync Project (Refresh Tasks)",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "android-linter.adbConnect",
+        "title": "Android: Connect via Wi-Fi (IP:Port)"
+      },
+      {
+        "command": "android-linter.adbPair",
+        "title": "Android: Pair via Wi-Fi (Code)"
       }
     ],
     "menus": {
@@ -88,6 +110,11 @@
         {
           "command": "android-linter.refreshDevices",
           "when": "view == androidExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "android-linter.syncProject",
+          "when": "view == gradleTasks",
           "group": "navigation"
         }
       ]
