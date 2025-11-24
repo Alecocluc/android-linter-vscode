@@ -90,22 +90,6 @@ export class LogcatParser {
     }
 
     /**
-     * Get icon for log level
-     */
-    public getLevelIcon(level: LogLevel): string {
-        const iconMap: Record<LogLevel, string> = {
-            'V': '○', // Verbose
-            'D': '◐', // Debug
-            'I': '●', // Info
-            'W': '⚠', // Warning
-            'E': '✖', // Error
-            'F': '✖', // Fatal
-            'A': '✖'  // Assert
-        };
-        return iconMap[level] || '○';
-    }
-
-    /**
      * Get priority number for log level (for filtering)
      */
     public getLevelPriority(level: LogLevel): number {
@@ -168,25 +152,25 @@ export class LogcatParser {
     }
 
     /**
-     * Format entry for display
+     * Format entry for display (Clipboard/Export)
+     * Format: MM-DD HH:MM:SS.mmm L/Tag(PID): Message
      */
     public formatEntry(entry: ParsedLogEntry, options?: { includeTimestamp?: boolean; includeThreadInfo?: boolean }): string {
         const opts = { includeTimestamp: true, includeThreadInfo: true, ...options };
         
-        let formatted = '';
+        let parts: string[] = [];
         
         if (opts.includeTimestamp && entry.timestamp) {
-            formatted += `[${entry.timestamp}] `;
+            parts.push(entry.timestamp);
         }
         
-        formatted += `${this.getLevelIcon(entry.level)} ${entry.level} `;
+        // Standard Android Format: L/Tag
+        parts.push(`${entry.level}/${entry.tag}`);
         
-        if (opts.includeThreadInfo && entry.pid && entry.tid) {
-            formatted += `[${entry.pid}:${entry.tid}] `;
+        if (opts.includeThreadInfo && entry.pid) {
+            parts.push(`(${entry.pid})`);
         }
         
-        formatted += `${entry.tag}: ${entry.message}`;
-        
-        return formatted;
+        return `${parts.join(' ')}: ${entry.message}`;
     }
 }

@@ -13,6 +13,7 @@ export class LogcatWebviewPanel {
         minLevel?: LogLevel;
         tags?: string[];
         searchText?: string;
+        pid?: string;
     } = {};
 
     private constructor(private readonly extensionUri: vscode.Uri) {
@@ -123,13 +124,26 @@ export class LogcatWebviewPanel {
                 this.setAutoScroll(!this.autoScroll);
                 break;
             case 'filterByLevel':
-                this.applyFilter({ minLevel: message.level });
+                this.applyFilter({ ...this.currentFilter, minLevel: message.level });
                 break;
             case 'filterByTag':
-                this.applyFilter({ tags: [message.tag] });
+                // Toggle tag filter if clicking the same tag, otherwise set it
+                const currentTags = this.currentFilter.tags || [];
+                if (currentTags.includes(message.tag)) {
+                     // If already filtered by this tag, remove it (toggle off)
+                     this.applyFilter({ ...this.currentFilter, tags: undefined });
+                } else {
+                    this.applyFilter({ ...this.currentFilter, tags: [message.tag] });
+                }
+                break;
+            case 'filterByPid':
+                this.applyFilter({ ...this.currentFilter, pid: message.pid || undefined });
+                break;
+            case 'filterByTagText':
+                this.applyFilter({ ...this.currentFilter, tags: message.tag ? [message.tag] : undefined });
                 break;
             case 'search':
-                this.applyFilter({ searchText: message.text });
+                this.applyFilter({ ...this.currentFilter, searchText: message.text || undefined });
                 break;
             case 'clearFilter':
                 this.applyFilter({});
@@ -176,6 +190,13 @@ export class LogcatWebviewPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Android Logcat</title>
     <style>
+        :root {
+            --toolbar-height: 36px;
+            --toolbar-bg: var(--vscode-editor-background);
+            --border-color: var(--vscode-widget-border);
+            --item-hover-bg: var(--vscode-list-hoverBackground);
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -183,8 +204,8 @@ export class LogcatWebviewPanel {
         }
 
         body {
-            font-family: var(--vscode-font-family), 'Segoe UI', system-ui, -apple-system, sans-serif;
-            font-size: 13px;
+            font-family: var(--vscode-editor-font-family), 'Segoe UI', monospace;
+            font-size: var(--vscode-editor-font-size);
             background-color: var(--vscode-editor-background);
             color: var(--vscode-editor-foreground);
             overflow: hidden;
@@ -193,306 +214,166 @@ export class LogcatWebviewPanel {
             height: 100vh;
         }
 
+        /* Toolbar */
         #toolbar {
             display: flex;
-            gap: 12px;
-            padding: 12px 16px;
-            background: var(--vscode-sideBar-background);
-            border-bottom: 1px solid var(--vscode-widget-border);
+            height: auto;
+            min-height: var(--toolbar-height);
+            padding: 4px 8px;
+            background: var(--toolbar-bg);
+            border-bottom: 1px solid var(--border-color);
             flex-shrink: 0;
             flex-wrap: wrap;
             align-items: center;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+            gap: 8px;
         }
 
-        .toolbar-group {
+        .toolbar-section {
             display: flex;
-            gap: 6px;
             align-items: center;
-        }
-
-        .toolbar-label {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--vscode-descriptionForeground);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-right: 4px;
+            gap: 4px;
         }
 
         .toolbar-divider {
             width: 1px;
-            height: 24px;
-            background-color: var(--vscode-widget-border);
+            height: 16px;
+            background-color: var(--border-color);
             margin: 0 4px;
-            opacity: 0.5;
         }
 
-        button {
-            padding: 6px 14px;
-            background-color: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
-            border: 1px solid transparent;
-            cursor: pointer;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            transition: all 0.15s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
-        }
-
-        button:hover {
-            background-color: var(--vscode-button-secondaryHoverBackground);
-            transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        button.primary {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-        }
-
-        button.primary:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-
-        button.active {
-            background-color: var(--vscode-inputOption-activeBackground);
-            color: var(--vscode-inputOption-activeForeground);
-            border-color: var(--vscode-inputOption-activeBorder);
-            box-shadow: 0 0 0 1px var(--vscode-focusBorder);
-        }
-
-        button.level-btn {
-            font-weight: 700;
-            min-width: 36px;
-            padding: 6px 10px;
-            justify-content: center;
-            font-family: 'Consolas', 'Monaco', monospace;
-        }
-
-        button.level-V { 
-            color: #888;
-            border-color: #888;
-        }
-        button.level-V.active { 
-            background-color: rgba(136, 136, 136, 0.2);
-            color: #aaa;
-        }
-
-        button.level-D { 
-            color: #2196F3;
-            border-color: #2196F3;
-        }
-        button.level-D.active { 
-            background-color: rgba(33, 150, 243, 0.2);
-            color: #42A5F5;
-        }
-
-        button.level-I { 
-            color: #4CAF50;
-            border-color: #4CAF50;
-        }
-        button.level-I.active { 
-            background-color: rgba(76, 175, 80, 0.2);
-            color: #66BB6A;
-        }
-
-        button.level-W { 
-            color: #FF9800;
-            border-color: #FF9800;
-        }
-        button.level-W.active { 
-            background-color: rgba(255, 152, 0, 0.2);
-            color: #FFA726;
-        }
-
-        button.level-E { 
-            color: #F44336;
-            border-color: #F44336;
-        }
-        button.level-E.active { 
-            background-color: rgba(244, 67, 54, 0.2);
-            color: #EF5350;
-        }
-
+        /* Inputs */
         input[type="text"] {
-            padding: 6px 12px;
+            padding: 2px 6px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
-            border-radius: 4px;
+            border-radius: 2px;
             font-size: 12px;
-            min-width: 200px;
-            transition: all 0.15s ease;
+            height: 24px;
+            outline: none;
         }
 
         input[type="text"]:focus {
-            outline: none;
             border-color: var(--vscode-focusBorder);
-            box-shadow: 0 0 0 1px var(--vscode-focusBorder);
         }
 
         input[type="text"]::placeholder {
             color: var(--vscode-input-placeholderForeground);
-            opacity: 0.7;
         }
 
+        #pid-input { width: 60px; }
+        #tag-input { width: 100px; }
+        #search-input { width: 180px; flex-grow: 1; }
+
+        /* Buttons */
+        button {
+            padding: 2px 8px;
+            height: 24px;
+            background: transparent;
+            color: var(--vscode-foreground);
+            border: 1px solid transparent;
+            cursor: pointer;
+            border-radius: 2px;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: var(--vscode-toolbar-hoverBackground);
+        }
+
+        button.active {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+
+        button.secondary {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        
+        button.secondary:hover {
+             background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        /* Level Toggles */
+        .level-group {
+            display: flex;
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .level-btn {
+            padding: 0 8px;
+            border-radius: 0;
+            border-right: 1px solid var(--vscode-input-border);
+            font-weight: 600;
+            min-width: 24px;
+        }
+
+        .level-btn:last-child {
+            border-right: none;
+        }
+
+        .level-btn.active {
+            background-color: var(--vscode-list-activeSelectionBackground);
+            color: var(--vscode-list-activeSelectionForeground);
+        }
+
+        /* Stats */
         #stats {
             font-size: 11px;
             color: var(--vscode-descriptionForeground);
             margin-left: auto;
             display: flex;
-            gap: 16px;
-            font-weight: 500;
-        }
-
-        .stat-item {
-            display: flex;
+            gap: 12px;
             align-items: center;
-            gap: 6px;
         }
 
-        .stat-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 10px;
-        }
-
-        .stat-badge.errors {
-            background-color: rgba(244, 67, 54, 0.2);
-            color: #F44336;
-        }
-
-        .stat-badge.warnings {
-            background-color: rgba(255, 152, 0, 0.2);
-            color: #FF9800;
-        }
-
-        .stat-badge.total {
-            background-color: var(--vscode-badge-background);
-            color: var(--vscode-badge-foreground);
-        }
-
+        /* Logs Area */
         #logs-container {
             flex: 1;
             overflow-y: auto;
-            padding: 8px;
-            background-color: var(--vscode-editor-background);
-        }
-
-        #logs-container::-webkit-scrollbar {
-            width: 10px;
-        }
-
-        #logs-container::-webkit-scrollbar-track {
-            background: var(--vscode-scrollbarSlider-background);
-        }
-
-        #logs-container::-webkit-scrollbar-thumb {
-            background: var(--vscode-scrollbarSlider-hoverBackground);
-            border-radius: 5px;
-        }
-
-        .log-entry {
-            padding: 6px 12px;
-            border-left: 4px solid transparent;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: 'Consolas', 'SF Mono', 'Monaco', 'Courier New', monospace;
+            padding: 4px 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 12px;
-            line-height: 1.5;
-            margin-bottom: 2px;
-            border-radius: 2px;
-            transition: all 0.1s ease;
+            line-height: 18px;
         }
 
-        .log-entry:hover {
-            background-color: var(--vscode-list-hoverBackground);
-            border-left-width: 5px;
-            padding-left: 11px;
+        .log-row {
+            display: flex;
+            padding: 1px 8px;
+            border-left: 3px solid transparent;
+            width: 100%;
         }
 
-        .log-entry.level-V {
-            border-left-color: #888;
-            color: #999;
+        .log-row:hover {
+            background-color: var(--item-hover-bg);
         }
 
-        .log-entry.level-D {
-            border-left-color: #2196F3;
-            color: #64B5F6;
-        }
+        /* Columns */
+        .col-time { color: var(--vscode-descriptionForeground); min-width: 110px; white-space: nowrap; }
+        .col-pid  { color: var(--vscode-descriptionForeground); min-width: 80px; white-space: nowrap; text-align: right; margin-right: 8px; }
+        .col-level { font-weight: bold; min-width: 20px; text-align: center; margin-right: 4px; }
+        .col-tag  { font-weight: 600; min-width: 120px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; color: var(--vscode-symbolIcon-classForeground); cursor: pointer; }
+        .col-msg  { flex: 1; white-space: pre-wrap; word-break: break-all; }
 
-        .log-entry.level-I {
-            border-left-color: #4CAF50;
-            color: var(--vscode-editor-foreground);
-        }
+        .col-tag:hover { text-decoration: underline; }
 
-        .log-entry.level-W {
-            border-left-color: #FF9800;
-            color: #FFB74D;
-            background-color: rgba(255, 152, 0, 0.05);
-        }
+        /* Level Colors */
+        .lvl-V { color: #A0A0A0; }
+        .lvl-D { color: #4FC1FF; } /* VS Code Blue */
+        .lvl-I { color: #9CDCFE; } /* VS Code Light Blue */
+        .lvl-W { color: #CCA700; } /* VS Code Yellow/Orange */
+        .lvl-E { color: #F48771; } /* VS Code Red */
+        .lvl-F { color: #FF0000; font-weight: bold; }
 
-        .log-entry.level-E {
-            border-left-color: #F44336;
-            color: #EF5350;
-            font-weight: 500;
-            background-color: rgba(244, 67, 54, 0.08);
-        }
-
-        .log-entry.level-F {
-            border-left-color: #C62828;
-            color: #EF5350;
-            font-weight: 700;
-            background-color: rgba(198, 40, 40, 0.12);
-        }
-
-        .log-timestamp {
-            color: var(--vscode-descriptionForeground);
-            opacity: 0.7;
-            margin-right: 10px;
-            font-size: 11px;
-        }
-
-        .log-level {
-            font-weight: 700;
-            margin-right: 10px;
-            min-width: 14px;
-            display: inline-block;
-            text-align: center;
-        }
-
-        .log-tag {
-            color: var(--vscode-symbolIcon-classForeground);
-            background-color: rgba(100, 100, 100, 0.15);
-            padding: 2px 8px;
-            border-radius: 3px;
-            margin-right: 10px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 11px;
-            transition: all 0.15s ease;
-        }
-
-        .log-tag:hover {
-            background-color: rgba(100, 100, 100, 0.25);
-            transform: translateY(-1px);
-        }
-
-        .log-message {
-            color: inherit;
-        }
-
+        /* Empty State */
         #empty-state {
             display: flex;
             flex-direction: column;
@@ -500,111 +381,50 @@ export class LogcatWebviewPanel {
             justify-content: center;
             height: 100%;
             color: var(--vscode-descriptionForeground);
-            gap: 16px;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        #empty-state.hidden {
-            display: none;
-        }
-
-        .icon {
-            font-size: 64px;
-            opacity: 0.4;
-            filter: grayscale(0.3);
-        }
-
-        .empty-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--vscode-foreground);
-        }
-
-        .empty-subtitle {
-            font-size: 12px;
             opacity: 0.7;
         }
     </style>
 </head>
 <body>
     <div id="toolbar">
-        <div class="toolbar-group">
-            <button id="clear-btn" class="primary" title="Clear all logs">
-                <span>🗑️</span>
-                Clear
-            </button>
-            <button id="pause-btn" title="Pause/Resume log capture">
-                <span>⏸️</span>
-                Pause
-            </button>
-            <button id="autoscroll-btn" class="active" title="Auto-scroll to latest logs">
-                <span>⬇️</span>
-                Auto-scroll
-            </button>
+        <div class="toolbar-section">
+            <button id="clear-btn" class="secondary">Clear</button>
+            <button id="pause-btn" class="secondary">Pause</button>
+            <button id="autoscroll-btn" class="active secondary">Auto-scroll</button>
         </div>
 
         <div class="toolbar-divider"></div>
 
-        <div class="toolbar-group">
-            <span class="toolbar-label">Filter</span>
-            <button class="level-btn level-V" data-level="V" title="Verbose">V</button>
-            <button class="level-btn level-D" data-level="D" title="Debug">D</button>
-            <button class="level-btn level-I" data-level="I" title="Info">I</button>
-            <button class="level-btn level-W" data-level="W" title="Warning">W</button>
-            <button class="level-btn level-E" data-level="E" title="Error">E</button>
+        <div class="toolbar-section">
+            <div class="level-group">
+                <button class="level-btn" data-level="V">V</button>
+                <button class="level-btn" data-level="D">D</button>
+                <button class="level-btn" data-level="I">I</button>
+                <button class="level-btn" data-level="W">W</button>
+                <button class="level-btn" data-level="E">E</button>
+            </div>
         </div>
 
         <div class="toolbar-divider"></div>
 
-        <div class="toolbar-group">
-            <input type="text" id="search-input" placeholder="🔍 Search logs..." />
-            <button id="clear-filter-btn" title="Clear all filters">
-                <span>✖️</span>
-                Clear Filter
-            </button>
+        <div class="toolbar-section" style="flex: 1;">
+            <input id="pid-filter" type="text" placeholder="PID" />
+            <input id="tag-filter" type="text" placeholder="Tag" />
+            <input id="search-filter" type="text" placeholder="Search log message..." />
         </div>
 
-        <div class="toolbar-divider"></div>
-
-        <div class="toolbar-group">
-            <button id="copy-btn" title="Copy all visible logs to clipboard">
-                <span>📋</span>
-                Copy
-            </button>
+        <div class="toolbar-section">
+            <button id="copy-btn" class="secondary" title="Copy visible logs">Copy</button>
         </div>
 
         <div id="stats">
-            <div class="stat-item">
-                <span class="stat-badge total" id="log-count">0</span>
-                <span>logs</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-badge errors" id="error-count">0</span>
-                <span>errors</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-badge warnings" id="warning-count">0</span>
-                <span>warnings</span>
-            </div>
+            <span id="log-count">0 logs</span>
         </div>
     </div>
 
     <div id="logs-container">
         <div id="empty-state">
-            <div class="icon">📱</div>
-            <div class="empty-title">Waiting for logcat output</div>
-            <div class="empty-subtitle">Start logcat from the Android Explorer to see logs here</div>
+            <p>Waiting for logs...</p>
         </div>
     </div>
 
@@ -615,46 +435,59 @@ export class LogcatWebviewPanel {
         let isPaused = false;
         let autoScroll = true;
         let currentMinLevel = null;
-        let stats = { total: 0, errors: 0, warnings: 0 };
-
-        const logsContainer = document.getElementById('logs-container');
+        
+        // Elements
+        const container = document.getElementById('logs-container');
         const emptyState = document.getElementById('empty-state');
         const pauseBtn = document.getElementById('pause-btn');
-        const autoScrollBtn = document.getElementById('autoscroll-btn');
-        const searchInput = document.getElementById('search-input');
+        const scrollBtn = document.getElementById('autoscroll-btn');
+        const logCount = document.getElementById('log-count');
 
-        // Toolbar event listeners
+        // Inputs
+        const pidInput = document.getElementById('pid-filter');
+        const tagInput = document.getElementById('tag-filter');
+        const searchInput = document.getElementById('search-filter');
+
+        // State
+        function updateUI() {
+            pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+            pauseBtn.classList.toggle('active', isPaused);
+            scrollBtn.classList.toggle('active', autoScroll);
+            logCount.textContent = \`\${logs.length} logs\`;
+        }
+
+        // Listeners
         document.getElementById('clear-btn').addEventListener('click', () => {
             vscode.postMessage({ type: 'clear' });
         });
 
         pauseBtn.addEventListener('click', () => {
-            if (isPaused) {
-                vscode.postMessage({ type: 'resume' });
-                isPaused = false;
-                pauseBtn.innerHTML = '<span>⏸️</span>Pause';
-            } else {
-                vscode.postMessage({ type: 'pause' });
-                isPaused = true;
-                pauseBtn.innerHTML = '<span>▶️</span>Resume';
-            }
+            if (isPaused) vscode.postMessage({ type: 'resume' });
+            else vscode.postMessage({ type: 'pause' });
         });
 
-        autoScrollBtn.addEventListener('click', () => {
+        scrollBtn.addEventListener('click', () => {
             autoScroll = !autoScroll;
-            autoScrollBtn.classList.toggle('active', autoScroll);
             vscode.postMessage({ type: 'toggleAutoScroll' });
+            updateUI();
         });
 
+        document.getElementById('copy-btn').addEventListener('click', () => {
+            vscode.postMessage({ type: 'copyAll' });
+        });
+
+        // Level Filter
         document.querySelectorAll('.level-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const level = btn.dataset.level;
+            btn.addEventListener('click', (e) => {
+                const level = e.target.dataset.level;
+                document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+                
                 if (currentMinLevel === level) {
-                    currentMinLevel = null;
-                    btn.classList.remove('active');
-                    vscode.postMessage({ type: 'clearFilter' });
+                    currentMinLevel = null; // Toggle off
+                    vscode.postMessage({ type: 'clearFilter' }); // Resets all filters effectively? No, need to preserve others.
+                    // Ideally we just send the level update. 
+                    vscode.postMessage({ type: 'filterByLevel', level: null });
                 } else {
-                    document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
                     currentMinLevel = level;
                     btn.classList.add('active');
                     vscode.postMessage({ type: 'filterByLevel', level });
@@ -662,160 +495,134 @@ export class LogcatWebviewPanel {
             });
         });
 
-        searchInput.addEventListener('input', debounce((e) => {
-            const text = e.target.value;
-            if (text) {
-                vscode.postMessage({ type: 'search', text });
-            } else {
-                vscode.postMessage({ type: 'clearFilter' });
-            }
+        // Input Filters (Debounced)
+        const debounce = (fn, ms) => {
+            let timeout;
+            return function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => fn.apply(this, arguments), ms);
+            };
+        };
+
+        pidInput.addEventListener('input', debounce((e) => {
+            vscode.postMessage({ type: 'filterByPid', pid: e.target.value.trim() });
         }, 300));
 
-        document.getElementById('clear-filter-btn').addEventListener('click', () => {
-            searchInput.value = '';
-            currentMinLevel = null;
-            document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
-            vscode.postMessage({ type: 'clearFilter' });
-        });
+        tagInput.addEventListener('input', debounce((e) => {
+            vscode.postMessage({ type: 'filterByTagText', tag: e.target.value.trim() });
+        }, 300));
 
-        document.getElementById('copy-btn').addEventListener('click', () => {
-            vscode.postMessage({ type: 'copyAll' });
-        });
+        searchInput.addEventListener('input', debounce((e) => {
+            vscode.postMessage({ type: 'search', text: e.target.value });
+        }, 300));
 
-        // Message handler
+        // Messaging
         window.addEventListener('message', event => {
-            const message = event.data;
-            
-            switch (message.type) {
+            const msg = event.data;
+            switch (msg.type) {
                 case 'addLog':
-                    addLogEntry(message.log);
-                    break;
-                case 'clear':
-                    clearLogs();
+                    addLog(msg.log);
                     break;
                 case 'replaceAll':
-                    replaceAllLogs(message.logs);
+                    renderAll(msg.logs);
+                    break;
+                case 'clear':
+                    logs = [];
+                    container.innerHTML = '';
+                    container.appendChild(emptyState);
+                    emptyState.style.display = 'flex';
+                    updateUI();
                     break;
                 case 'updateState':
-                    updateState(message.state);
+                    if (msg.state.isPaused !== undefined) isPaused = msg.state.isPaused;
+                    if (msg.state.autoScroll !== undefined) autoScroll = msg.state.autoScroll;
+                    updateUI();
                     break;
             }
         });
 
-        function addLogEntry(log) {
+        function addLog(log) {
             logs.push(log);
+            emptyState.style.display = 'none';
             
-            emptyState.classList.add('hidden');
+            const row = createRow(log);
+            container.appendChild(row);
 
-            const entry = createLogElement(log);
-            logsContainer.appendChild(entry);
-
-            updateStats(log);
+            // Prune DOM if too large (keep last 2000)
+            if (container.children.length > 2000) {
+                container.removeChild(container.children[0]);
+                // Don't remove emptyState if it was index 0 (shouldn't be if logs exist)
+            }
 
             if (autoScroll) {
-                logsContainer.scrollTop = logsContainer.scrollHeight;
-            }
-
-            // Limit DOM elements to prevent performance issues
-            const children = logsContainer.children;
-            if (children.length > 10000) {
-                logsContainer.removeChild(children[0]);
-            }
-        }
-
-        function createLogElement(log) {
-            const div = document.createElement('div');
-            div.className = \`log-entry level-\${log.level}\`;
-            
-            const timestamp = log.timestamp ? \`<span class="log-timestamp">[\${log.timestamp}]</span>\` : '';
-            const level = \`<span class="log-level">\${log.level}</span>\`;
-            const tag = \`<span class="log-tag" data-tag="\${log.tag}">\${log.tag}</span>\`;
-            const message = \`<span class="log-message">\${escapeHtml(log.message)}</span>\`;
-            
-            div.innerHTML = \`\${timestamp}\${level}\${tag}\${message}\`;
-            
-            // Click tag to filter
-            const tagElement = div.querySelector('.log-tag');
-            if (tagElement) {
-                tagElement.addEventListener('click', () => {
-                    vscode.postMessage({ type: 'filterByTag', tag: log.tag });
-                });
+                container.scrollTop = container.scrollHeight;
             }
             
-            return div;
+            updateUI();
         }
 
-        function clearLogs() {
-            logs = [];
-            stats = { total: 0, errors: 0, warnings: 0 };
-            logsContainer.innerHTML = '<div id="empty-state"><div class="icon">🧹</div><div class="empty-title">Logs cleared</div><div class="empty-subtitle">New logs will appear here</div></div>';
-            emptyState = document.getElementById('empty-state');
-            updateStatsDisplay();
-        }
-
-        function replaceAllLogs(newLogs) {
+        function renderAll(newLogs) {
             logs = newLogs;
-            logsContainer.innerHTML = '';
-            stats = { total: 0, errors: 0, warnings: 0 };
-            
-            if (newLogs.length === 0) {
-                logsContainer.innerHTML = '<div id="empty-state"><div class="icon">🔍</div><div class="empty-title">No logs match the filter</div><div class="empty-subtitle">Try adjusting your filter criteria</div></div>';
+            container.innerHTML = '';
+            if (logs.length === 0) {
+                container.appendChild(emptyState);
+                emptyState.style.display = 'flex';
+                emptyState.querySelector('p').textContent = 'No logs match filters';
             } else {
-                newLogs.forEach(log => {
-                    const entry = createLogElement(log);
-                    logsContainer.appendChild(entry);
-                    updateStats(log);
-                });
+                emptyState.style.display = 'none';
+                // Use a fragment for performance
+                const fragment = document.createDocumentFragment();
+                newLogs.forEach(log => fragment.appendChild(createRow(log)));
+                container.appendChild(fragment);
             }
             
             if (autoScroll) {
-                logsContainer.scrollTop = logsContainer.scrollHeight;
+                container.scrollTop = container.scrollHeight;
             }
+            updateUI();
         }
 
-        function updateState(state) {
-            if (state.isPaused !== undefined) {
-                isPaused = state.isPaused;
-                pauseBtn.innerHTML = isPaused ? '<span>▶️</span>Resume' : '<span>⏸️</span>Pause';
-            }
-            if (state.autoScroll !== undefined) {
-                autoScroll = state.autoScroll;
-                autoScrollBtn.classList.toggle('active', autoScroll);
-            }
-        }
-
-        function updateStats(log) {
-            stats.total++;
-            if (log.level === 'E' || log.level === 'F') {
-                stats.errors++;
-            } else if (log.level === 'W') {
-                stats.warnings++;
-            }
-            updateStatsDisplay();
-        }
-
-        function updateStatsDisplay() {
-            document.getElementById('log-count').textContent = stats.total;
-            document.getElementById('error-count').textContent = stats.errors;
-            document.getElementById('warning-count').textContent = stats.warnings;
-        }
-
-        function escapeHtml(text) {
+        function createRow(log) {
             const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+            div.className = 'log-row';
+            // Level specific styling for the row content if needed, usually just color
+            div.classList.add(\`lvl-\${log.level}\`);
 
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
+            // Structure: Time | PID/TID | Lvl | Tag | Msg
+            // Note: Using spans for columns
+            
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'col-time';
+            timeSpan.textContent = log.timestamp || '';
+
+            const pidSpan = document.createElement('span');
+            pidSpan.className = 'col-pid';
+            pidSpan.textContent = \`\${log.pid}-\${log.tid}\`;
+
+            const lvlSpan = document.createElement('span');
+            lvlSpan.className = 'col-level';
+            lvlSpan.textContent = log.level;
+            
+            const tagSpan = document.createElement('span');
+            tagSpan.className = 'col-tag';
+            tagSpan.textContent = log.tag;
+            tagSpan.onclick = () => {
+                // Populate tag input and trigger filter
+                tagInput.value = log.tag;
+                vscode.postMessage({ type: 'filterByTagText', tag: log.tag });
             };
+
+            const msgSpan = document.createElement('span');
+            msgSpan.className = 'col-msg';
+            msgSpan.textContent = log.message;
+
+            div.appendChild(timeSpan);
+            div.appendChild(pidSpan);
+            div.appendChild(lvlSpan);
+            div.appendChild(tagSpan);
+            div.appendChild(msgSpan);
+
+            return div;
         }
     </script>
 </body>
