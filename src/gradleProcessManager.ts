@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
+import { CONFIG_NAMESPACE, CONFIG_KEYS } from './constants';
+import { Logger } from './logger';
 
 export interface GradleCommandOptions {
     timeout?: number;
@@ -41,11 +43,11 @@ interface WorkspaceState {
 }
 
 export class GradleProcessManager implements vscode.Disposable {
-    private readonly outputChannel: vscode.OutputChannel;
+    private readonly logger: Logger;
     private readonly workspaceStates = new Map<string, WorkspaceState>();
 
     constructor(outputChannel: vscode.OutputChannel) {
-        this.outputChannel = outputChannel;
+        this.logger = Logger.create(outputChannel, 'Gradle');
     }
 
     public async runCommand(
@@ -77,7 +79,7 @@ export class GradleProcessManager implements vscode.Disposable {
         const gradleExecutable = this.resolveGradleExecutable(workspaceRoot);
         if (!gradleExecutable) {
             const errorMsg = 'Gradle wrapper not found in workspace. Set android-linter.gradlePath if using a custom location.';
-            this.log(`❌ ${errorMsg}`);
+            this.logger.error(errorMsg);
             vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
             throw new Error(errorMsg);
         }
@@ -87,11 +89,11 @@ export class GradleProcessManager implements vscode.Disposable {
         this.cancelScheduledStop(state);
         state.runningCommands += 1;
 
-        const config = vscode.workspace.getConfiguration('android-linter');
-        const jvmArgs = (config.get<string>('gradleJvmArgs') || '').trim();
-        const stopOnIdle = config.get<boolean>('gradleStopDaemonsOnIdle', true);
-        const idleTimeout = config.get<number>('gradleDaemonIdleTimeoutMs') || 300000;
-        const maxWorkers = config.get<number>('gradleMaxWorkers') || 0;
+        const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+        const jvmArgs = (config.get<string>(CONFIG_KEYS.GRADLE_JVM_ARGS) || '').trim();
+        const stopOnIdle = config.get<boolean>(CONFIG_KEYS.GRADLE_STOP_DAEMONS_ON_IDLE, true);
+        const idleTimeout = config.get<number>(CONFIG_KEYS.GRADLE_DAEMON_IDLE_TIMEOUT_MS) || 300000;
+        const maxWorkers = config.get<number>(CONFIG_KEYS.GRADLE_MAX_WORKERS) || 0;
 
         const finalArgs = [...args];
         if (maxWorkers > 0 && !finalArgs.includes('--max-workers')) {
@@ -111,7 +113,7 @@ export class GradleProcessManager implements vscode.Disposable {
 
         const commandLabel = `${path.basename(gradleExecutable)} ${finalArgs.join(' ')}`;
         if (!options.silent) {
-            this.log(`⚙️ Running Gradle command: ${commandLabel}`);
+            this.logger.build(`Running Gradle command: ${commandLabel}`);
         }
 
         // Quote the executable path if it contains spaces (Windows PowerShell)
@@ -133,10 +135,10 @@ export class GradleProcessManager implements vscode.Disposable {
                             silent: true,
                             manageIdle: false
                         });
-                        this.log('🛑 Stopped idle Gradle daemons');
+                        this.logger.stop('Stopped idle Gradle daemons');
                     } catch (error) {
                         const message = error instanceof Error ? error.message : String(error);
-                        this.log(`⚠️ Failed to stop Gradle daemons: ${message}`);
+                        this.logger.warn(`Failed to stop Gradle daemons: ${message}`);
                     } finally {
                         this.cancelScheduledStop(state);
                     }
@@ -179,7 +181,7 @@ export class GradleProcessManager implements vscode.Disposable {
                 const text = data.toString();
                 stdout += text;
                 if (!options.silent) {
-                    this.outputChannel.append(text);
+                    this.logger.appendAlways(text);
                 }
             });
 
@@ -187,7 +189,7 @@ export class GradleProcessManager implements vscode.Disposable {
                 const text = data.toString();
                 stderr += text;
                 if (!options.silent) {
-                    this.outputChannel.append(text);
+                    this.logger.appendAlways(text);
                 }
             });
 
@@ -254,8 +256,8 @@ export class GradleProcessManager implements vscode.Disposable {
     }
 
     private resolveGradleExecutable(workspaceRoot: string): string | undefined {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        let gradlePath = config.get<string>('gradlePath') || './gradlew';
+        const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+        let gradlePath = config.get<string>(CONFIG_KEYS.GRADLE_PATH) || './gradlew';
 
         if (!path.isAbsolute(gradlePath)) {
             gradlePath = gradlePath.replace(/^\.\//, '');
@@ -286,13 +288,6 @@ export class GradleProcessManager implements vscode.Disposable {
         }
 
         return undefined;
-    }
-
-    private log(message: string): void {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        if (config.get<boolean>('verboseLogging', true)) {
-            this.outputChannel.appendLine(message);
-        }
     }
 
     private getWorkspaceState(workspaceRoot: string): WorkspaceState {

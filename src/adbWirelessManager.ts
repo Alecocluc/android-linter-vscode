@@ -1,14 +1,19 @@
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { Logger } from './logger';
 
 const execFileAsync = promisify(execFile);
 
 export class AdbWirelessManager {
+    private readonly logger: Logger;
+
     constructor(
-        private readonly outputChannel: vscode.OutputChannel,
+        outputChannel: vscode.OutputChannel,
         private readonly adbPath: string
-    ) {}
+    ) {
+        this.logger = Logger.create(outputChannel);
+    }
 
     public async connect(): Promise<void> {
         const ipPort = await vscode.window.showInputBox({
@@ -23,7 +28,7 @@ export class AdbWirelessManager {
         }
 
         try {
-            vscode.window.withProgress({
+            await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: `Connecting to ${ipPort}...`,
             }, async () => {
@@ -32,7 +37,7 @@ export class AdbWirelessManager {
             vscode.window.showInformationMessage(`Successfully connected to ${ipPort}`);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.outputChannel.appendLine(`❌ ADB Connect failed: ${message}`);
+            this.logger.error(`ADB Connect failed: ${message}`);
             vscode.window.showErrorMessage(`Failed to connect to ${ipPort}. Check the Output channel for details.`);
         }
     }
@@ -61,7 +66,7 @@ export class AdbWirelessManager {
         }
 
         try {
-            vscode.window.withProgress({
+            await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: `Pairing with ${ipPort}...`,
             }, async () => {
@@ -80,7 +85,7 @@ export class AdbWirelessManager {
 
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.outputChannel.appendLine(`❌ ADB Pair failed: ${message}`);
+            this.logger.error(`ADB Pair failed: ${message}`);
             vscode.window.showErrorMessage(`Failed to pair with ${ipPort}. Check the Output channel for details.`);
         }
     }

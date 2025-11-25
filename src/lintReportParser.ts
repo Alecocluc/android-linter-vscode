@@ -4,23 +4,19 @@ import { createReadStream } from 'fs';
 import { ReadStream } from 'fs';
 import { createStream, QualifiedTag, SAXStream } from 'sax';
 import { LintIssue, QuickFix } from './diagnosticProvider';
+import { Logger } from './logger';
 
 export class LintReportParser {
-    private outputChannel?: any;
+    private logger?: Logger;
 
-    constructor(outputChannel?: any) {
-        this.outputChannel = outputChannel;
+    constructor(outputChannel?: vscode.OutputChannel) {
+        if (outputChannel) {
+            this.logger = Logger.create(outputChannel);
+        }
     }
 
     private log(message: string) {
-        if (!this.outputChannel) {
-            return;
-        }
-
-        const config = vscode.workspace.getConfiguration('android-linter');
-        if (config.get<boolean>('verboseLogging', true)) {
-            this.outputChannel.appendLine(`   [Parser] ${message}`);
-        }
+        this.logger?.log(`[Parser] ${message}`);
     }
     public async parseXmlReport(reportPath: string, workspaceRoot: string): Promise<LintIssue[]> {
         const issues: LintIssue[] = [];

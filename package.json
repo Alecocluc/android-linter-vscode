@@ -22,7 +22,11 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "*"
+    "workspaceContains:**/build.gradle",
+    "workspaceContains:**/build.gradle.kts",
+    "workspaceContains:**/AndroidManifest.xml",
+    "onLanguage:kotlin",
+    "onLanguage:java"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -103,6 +107,10 @@
       {
         "command": "android-linter.adbPair",
         "title": "Android: Pair via Wi-Fi (Code)"
+      },
+      {
+        "command": "android-linter.extractString",
+        "title": "Android: Extract String Resource"
       }
     ],
     "menus": {

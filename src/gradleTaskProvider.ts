@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GradleProcessManager } from './gradleProcessManager';
+import { Logger } from './logger';
 
 export class GradleTaskProvider implements vscode.TreeDataProvider<GradleTreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<GradleTreeItem | undefined | null | void> = new vscode.EventEmitter<GradleTreeItem | undefined | null | void>();
@@ -7,11 +8,17 @@ export class GradleTaskProvider implements vscode.TreeDataProvider<GradleTreeIte
 
     private cachedTasks: Map<string, GradleTask[]> = new Map();
     private isRefreshing = false;
+    private logger?: Logger;
 
     constructor(
         private readonly gradleManager: GradleProcessManager,
-        private readonly workspaceRoot: string
-    ) {}
+        private readonly workspaceRoot: string,
+        outputChannel?: vscode.OutputChannel
+    ) {
+        if (outputChannel) {
+            this.logger = Logger.create(outputChannel);
+        }
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -60,7 +67,7 @@ export class GradleTaskProvider implements vscode.TreeDataProvider<GradleTreeIte
             this.parseTasks(stdout);
         } catch (error) {
             vscode.window.showErrorMessage('Failed to refresh Gradle tasks');
-            console.error(error);
+            this.logger?.error(`Failed to refresh Gradle tasks: ${error}`);
         } finally {
             this.isRefreshing = false;
             this.refresh();

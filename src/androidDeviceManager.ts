@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
+import { CONFIG_NAMESPACE, CONFIG_KEYS } from './constants';
+import { Logger } from './logger';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,10 +16,10 @@ export interface AndroidDevice {
 }
 
 export class AndroidDeviceManager implements vscode.Disposable {
-    private readonly outputChannel: vscode.OutputChannel;
+    private readonly logger: Logger;
 
     constructor(outputChannel: vscode.OutputChannel) {
-        this.outputChannel = outputChannel;
+        this.logger = Logger.create(outputChannel, 'DeviceManager');
     }
 
     public async listDevices(): Promise<AndroidDevice[]> {
@@ -59,7 +61,7 @@ export class AndroidDeviceManager implements vscode.Disposable {
             return devices;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log(`❌ Failed to list Android devices: ${message}`);
+            this.logger.error(`Failed to list Android devices: ${message}`);
             vscode.window.showErrorMessage(`Android Linter: Unable to list connected Android devices. Ensure adb is installed and reachable.`);
             return [];
         }
@@ -87,7 +89,7 @@ export class AndroidDeviceManager implements vscode.Disposable {
             return undefined;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log(`⚠️ Failed to resolve launcher activity: ${message}`);
+            this.logger.warn(`Failed to resolve launcher activity: ${message}`);
             return undefined;
         }
     }
@@ -102,7 +104,7 @@ export class AndroidDeviceManager implements vscode.Disposable {
             );
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log(`❌ Failed to start activity ${componentName}: ${message}`);
+            this.logger.error(`Failed to start activity ${componentName}: ${message}`);
             vscode.window.showErrorMessage(
                 `Android Linter: Unable to start activity ${componentName} on ${deviceId}. Check Output for details.`
             );
@@ -120,7 +122,7 @@ export class AndroidDeviceManager implements vscode.Disposable {
             );
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log(`❌ Failed to start app via monkey for package ${packageName}: ${message}`);
+            this.logger.error(`Failed to start app via monkey for package ${packageName}: ${message}`);
             throw error;
         }
     }
@@ -170,7 +172,7 @@ export class AndroidDeviceManager implements vscode.Disposable {
             await execFileAsync(adbPath, ['-s', deviceId, 'logcat', '-c'], { timeout: 5000 });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log(`⚠️ Failed to clear logcat: ${message}`);
+            this.logger.warn(`Failed to clear logcat: ${message}`);
         }
     }
 
@@ -182,17 +184,17 @@ export class AndroidDeviceManager implements vscode.Disposable {
                 ['-s', deviceId, 'shell', 'am', 'force-stop', packageName],
                 { timeout: 15000 }
             );
-            this.log(`✅ Force-stopped package ${packageName} on ${deviceId}`);
+            this.logger.success(`Force-stopped package ${packageName} on ${deviceId}`);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log(`❌ Failed to force-stop package ${packageName}: ${message}`);
+            this.logger.error(`Failed to force-stop package ${packageName}: ${message}`);
             // Don't throw an error, just log it
         }
     }
 
     public getAdbPath(): string {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        let adbPath = (config.get<string>('adbPath') || 'adb').trim();
+        const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+        let adbPath = (config.get<string>(CONFIG_KEYS.ADB_PATH) || 'adb').trim();
 
         const hasPathSeparator = adbPath.startsWith('./') || adbPath.includes('/') || adbPath.includes('\\');
 
@@ -209,13 +211,6 @@ export class AndroidDeviceManager implements vscode.Disposable {
 
     public dispose(): void {
         // No resources to dispose currently
-    }
-
-    private log(message: string): void {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        if (config.get<boolean>('verboseLogging', true)) {
-            this.outputChannel.appendLine(message);
-        }
     }
 
     private async delay(ms: number): Promise<void> {

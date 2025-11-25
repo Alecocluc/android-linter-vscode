@@ -128,7 +128,7 @@ export class HoverProvider implements vscode.HoverProvider {
 
             return locations.length > 0 ? locations : undefined;
         } catch (error) {
-            console.error('Error finding references:', error);
+            // Silently handle errors - hover reference lookup is best-effort
             return undefined;
         }
     }

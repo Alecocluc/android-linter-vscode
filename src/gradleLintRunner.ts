@@ -4,23 +4,19 @@ import * as fs from 'fs';
 import { LintIssue } from './diagnosticProvider';
 import { LintReportParser } from './lintReportParser';
 import { GradleCommandError, GradleProcessManager } from './gradleProcessManager';
+import { CONFIG_NAMESPACE, CONFIG_KEYS, DEFAULTS } from './constants';
+import { Logger } from './logger';
 
 export class GradleLintRunner implements vscode.Disposable {
     private parser: LintReportParser;
-    private outputChannel: vscode.OutputChannel;
+    private logger: Logger;
     private gradleManager: GradleProcessManager;
 
     constructor(gradleManager: GradleProcessManager, outputChannel?: vscode.OutputChannel) {
         this.parser = new LintReportParser(outputChannel);
-        this.outputChannel = outputChannel || vscode.window.createOutputChannel('Android Linter');
+        const channel = outputChannel || vscode.window.createOutputChannel('Android Linter');
+        this.logger = Logger.create(channel, 'LintRunner');
         this.gradleManager = gradleManager;
-    }
-
-    private log(message: string): void {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        if (config.get<boolean>('verboseLogging', true)) {
-            this.outputChannel.appendLine(message);
-        }
     }
 
     public async lintFile(workspaceRoot: string, filePath: string): Promise<LintIssue[]> {
@@ -29,8 +25,8 @@ export class GradleLintRunner implements vscode.Disposable {
         // So we run full project lint and show all issues
         const allIssues = await this.runGradleLint(workspaceRoot);
         
-        this.log(`   📊 Found ${allIssues.length} total issues in project`);
-        this.log(`   🎯 Returning all issues (not just for ${filePath})`);
+        this.logger.log(`   📊 Found ${allIssues.length} total issues in project`);
+        this.logger.log(`   🎯 Returning all issues (not just for ${filePath})`);
         
         // Return ALL issues, not just for this file
         // This matches Android Studio behavior where opening any file shows all project issues
@@ -48,24 +44,24 @@ export class GradleLintRunner implements vscode.Disposable {
         workspaceRoot: string,
         cancellationToken?: vscode.CancellationToken
     ): Promise<LintIssue[]> {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        const timeout = config.get<number>('lintTimeout') || 600000;
-        const lintScope = config.get<string>('lintScope') || 'module';
-        const lintModule = config.get<string>('lintModule') || 'app';
+        const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+        const timeout = config.get<number>(CONFIG_KEYS.LINT_TIMEOUT) || DEFAULTS.LINT_TIMEOUT;
+        const lintScope = config.get<string>(CONFIG_KEYS.LINT_SCOPE) || 'module';
+        const lintModule = config.get<string>(CONFIG_KEYS.LINT_MODULE) || 'app';
 
         // Optimization settings
-        const lintTaskName = config.get<string>('lintTask') || 'lintDebug';
-        const useOffline = config.get<boolean>('lintOffline', false);
-        const fastMode = config.get<boolean>('lintFastMode', true);
+        const lintTaskName = config.get<string>(CONFIG_KEYS.LINT_TASK) || 'lintDebug';
+        const useOffline = config.get<boolean>(CONFIG_KEYS.LINT_OFFLINE, false);
+        const fastMode = config.get<boolean>(CONFIG_KEYS.LINT_FAST_MODE, true);
 
         // Determine the full lint task
         let lintTask: string;
         if (lintScope === 'project') {
             lintTask = lintTaskName;
-            this.log(`🔧 Starting Gradle lint task: ${lintTask} (full project)`);
+            this.logger.build(`Starting Gradle lint task: ${lintTask} (full project)`);
         } else {
             lintTask = `:${lintModule}:${lintTaskName}`;
-            this.log(`🔧 Starting Gradle lint task: ${lintTask} (module: ${lintModule})`);
+            this.logger.build(`Starting Gradle lint task: ${lintTask} (module: ${lintModule})`);
         }
 
         const args = [lintTask];
@@ -94,14 +90,14 @@ export class GradleLintRunner implements vscode.Disposable {
             );
 
             if (result.stdout) {
-                this.log(`📤 Gradle output: ${result.stdout.substring(0, 500)}`);
+                this.logger.log(`📤 Gradle output: ${result.stdout.substring(0, 500)}`);
             }
             if (result.stderr) {
-                this.log(`⚠️ Gradle stderr: ${result.stderr.substring(0, 500)}`);
+                this.logger.warn(`Gradle stderr: ${result.stderr.substring(0, 500)}`);
             }
 
             if (cancellationToken?.isCancellationRequested) {
-                this.log('🛑 Lint cancelled');
+                this.logger.stop('Lint cancelled');
                 return [];
             }
 
@@ -109,8 +105,8 @@ export class GradleLintRunner implements vscode.Disposable {
         } catch (error: any) {
             // Lint command may exit with non-zero even when successful
             // if it finds issues, so we still try to parse results
-            this.log(`⚠️ Gradle command exited with error (this is normal if lint found issues)`);
-            this.log(`   Error: ${error.message}`);
+            this.logger.warn('Gradle command exited with error (this is normal if lint found issues)');
+            this.logger.log(`   Error: ${error.message}`);
             
             // Check if there are compilation errors in the output
             const stdout = error instanceof GradleCommandError ? error.stdout : error.stdout || '';
@@ -120,7 +116,7 @@ export class GradleLintRunner implements vscode.Disposable {
             // Check for common Gradle setup errors
             if (errorOutput.includes('SDK location not found') || errorOutput.includes('ANDROID_HOME')) {
                 const errorMsg = 'Android SDK not found. Please set ANDROID_HOME or configure local.properties';
-                this.log(`❌ ${errorMsg}`);
+                this.logger.error(errorMsg);
                 vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
                 throw new Error(errorMsg);
             }
@@ -129,14 +125,14 @@ export class GradleLintRunner implements vscode.Disposable {
                 const sdkMatch = errorOutput.match(/platforms;android-(\d+)/);
                 const version = sdkMatch ? sdkMatch[1] : 'unknown';
                 const errorMsg = `Missing Android SDK Platform ${version}. Install it using Android Studio SDK Manager.`;
-                this.log(`❌ ${errorMsg}`);
+                this.logger.error(errorMsg);
                 vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
                 throw new Error(errorMsg);
             }
             
             if (errorOutput.includes('Could not resolve') || errorOutput.includes('Could not download')) {
                 const errorMsg = 'Gradle dependency resolution failed. Check your internet connection and gradle configuration.';
-                this.log(`❌ ${errorMsg}`);
+                this.logger.error(errorMsg);
                 vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
                 throw new Error(errorMsg);
             }
@@ -146,7 +142,7 @@ export class GradleLintRunner implements vscode.Disposable {
             const compilationWarnings = compilationIssues.filter(issue => issue.severity === 'warning');
             
             if (compilationErrors.length > 0) {
-                this.log(`🔴 Found ${compilationErrors.length} compilation errors in lint output`);
+                this.logger.error(`Found ${compilationErrors.length} compilation errors in lint output`);
                 // Return only compilation errors, don't try to parse lint report
                 // because the build failed before lint could complete
                 return compilationErrors;
@@ -157,18 +153,21 @@ export class GradleLintRunner implements vscode.Disposable {
                 
                 // If we found compilation warnings, merge them with lint results
                 if (compilationWarnings.length > 0) {
-                    this.log(`🔴 Found ${compilationWarnings.length} compilation warnings in lint output`);
+                    this.logger.warn(`Found ${compilationWarnings.length} compilation warnings in lint output`);
                     return [...compilationWarnings, ...results];
                 }
-                
-                return results;
+
+                // If we have results, return them
+                if (results.length > 0) {
+                    return results;
+                }
                 
                 // If no results found but gradle failed, it's an actual error
-                const exitCode = error instanceof GradleCommandError ? error.exitCode : error.code;
-                if (results.length === 0 && exitCode !== 0) {
+                const exitCode = error instanceof GradleCommandError ? error.exitCode : (error as any).code;
+                if (exitCode !== 0) {
                     const errorMsg = 'Gradle lint failed without generating reports. Check the Output panel for details.';
-                    this.log(`❌ ${errorMsg}`);
-                    this.log(`   Full error: ${errorOutput.substring(0, 1000)}`);
+                    this.logger.error(errorMsg);
+                    this.logger.log(`   Full error: ${errorOutput.substring(0, 1000)}`);
                     vscode.window.showErrorMessage(`Android Linter: ${errorMsg}`);
                     throw new Error(errorMsg);
                 }
@@ -211,18 +210,18 @@ export class GradleLintRunner implements vscode.Disposable {
             path.join(workspaceRoot, 'app', 'build', 'reports', 'lint-results-debug.xml'),
         ];
 
-        this.log(`🔍 Looking for lint reports (expecting: ${derivedReportName})...`);
+        this.logger.log(`🔍 Looking for lint reports (expecting: ${derivedReportName})...`);
 
         // Try to find and parse the first available report
         for (const reportPath of possibleReportPaths) {
             // this.log(`   Checking: ${reportPath}`); // Too verbose
             if (fs.existsSync(reportPath)) {
-                this.log(`   ✅ Found XML report: ${reportPath}`);
+                this.logger.log(`   ✅ Found XML report: ${reportPath}`);
                 const stats = fs.statSync(reportPath);
-                this.log(`   📄 Report size: ${stats.size} bytes`);
+                this.logger.log(`   📄 Report size: ${stats.size} bytes`);
 
                 const parsedIssues = await this.parser.parseXmlReport(reportPath, workspaceRoot);
-                this.log(`   🎯 Parser returned ${parsedIssues.length} issues`);
+                this.logger.log(`   🎯 Parser returned ${parsedIssues.length} issues`);
                 
                 return parsedIssues;
             }
@@ -235,16 +234,16 @@ export class GradleLintRunner implements vscode.Disposable {
         ];
 
         for (const jsonReportPath of possibleJsonPaths) {
-            this.log(`   Checking: ${jsonReportPath}`);
+            this.logger.log(`   Checking: ${jsonReportPath}`);
             if (fs.existsSync(jsonReportPath)) {
-                this.log(`   ✅ Found JSON report: ${jsonReportPath}`);
+                this.logger.log(`   ✅ Found JSON report: ${jsonReportPath}`);
                 const jsonContent = fs.readFileSync(jsonReportPath, 'utf-8');
                 return this.parser.parseJsonReport(jsonContent, workspaceRoot);
             }
         }
 
         // No reports found
-        this.log(`   ❌ No lint reports found`);
+        this.logger.log(`   ❌ No lint reports found`);
         return [];
     }
 
@@ -276,7 +275,7 @@ export class GradleLintRunner implements vscode.Disposable {
             };
             
             issues.push(issue);
-            this.log(`   🔴 ${severity === 'e' ? 'Error' : 'Warning'}: ${path.basename(localPath)}:${line} - ${message.substring(0, 80)}`);
+            this.logger.log(`   🔴 ${severity === 'e' ? 'Error' : 'Warning'}: ${path.basename(localPath)}:${line} - ${message.substring(0, 80)}`);
         }
         
         return issues;

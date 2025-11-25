@@ -1,6 +1,41 @@
 import * as vscode from 'vscode';
 import { LogcatParser, ParsedLogEntry, LogLevel } from './logcatParser';
 
+/**
+ * Messages sent FROM the webview TO the extension
+ */
+type WebviewToExtensionMessage = 
+    | { type: 'clear' }
+    | { type: 'pause' }
+    | { type: 'resume' }
+    | { type: 'toggleAutoScroll' }
+    | { type: 'filterByLevel'; level: LogLevel | null }
+    | { type: 'filterByTag'; tag: string }
+    | { type: 'filterByPid'; pid: string }
+    | { type: 'filterByTagText'; tag: string }
+    | { type: 'search'; text: string }
+    | { type: 'clearFilter' }
+    | { type: 'copyAll' };
+
+/**
+ * Messages sent FROM the extension TO the webview
+ */
+type ExtensionToWebviewMessage =
+    | { type: 'addLog'; log: ParsedLogEntry }
+    | { type: 'replaceAll'; logs: ParsedLogEntry[] }
+    | { type: 'clear' }
+    | { type: 'updateState'; state: { isPaused?: boolean; autoScroll?: boolean } };
+
+/**
+ * Filter configuration for logcat entries
+ */
+interface LogcatFilter {
+    minLevel?: LogLevel;
+    tags?: string[];
+    searchText?: string;
+    pid?: string;
+}
+
 export class LogcatWebviewPanel {
     private static instance: LogcatWebviewPanel | undefined;
     private panel: vscode.WebviewPanel | undefined;
@@ -9,12 +44,7 @@ export class LogcatWebviewPanel {
     private readonly maxLogs: number = 10000;
     private isPaused: boolean = false;
     private autoScroll: boolean = true;
-    private currentFilter: {
-        minLevel?: LogLevel;
-        tags?: string[];
-        searchText?: string;
-        pid?: string;
-    } = {};
+    private currentFilter: LogcatFilter = {};
 
     private constructor(private readonly extensionUri: vscode.Uri) {
         this.parser = new LogcatParser();
@@ -75,41 +105,45 @@ export class LogcatWebviewPanel {
 
         // Send to webview if visible and matches filter
         if (this.panel && this.parser.matchesFilter(entry, this.currentFilter)) {
-            this.panel.webview.postMessage({
+            const message: ExtensionToWebviewMessage = {
                 type: 'addLog',
                 log: entry
-            });
+            };
+            this.panel.webview.postMessage(message);
         }
     }
 
     public clear(): void {
         this.logs = [];
         if (this.panel) {
-            this.panel.webview.postMessage({ type: 'clear' });
+            const message: ExtensionToWebviewMessage = { type: 'clear' };
+            this.panel.webview.postMessage(message);
         }
     }
 
     public setPaused(paused: boolean): void {
         this.isPaused = paused;
         if (this.panel) {
-            this.panel.webview.postMessage({ 
+            const message: ExtensionToWebviewMessage = { 
                 type: 'updateState',
                 state: { isPaused: paused }
-            });
+            };
+            this.panel.webview.postMessage(message);
         }
     }
 
     public setAutoScroll(autoScroll: boolean): void {
         this.autoScroll = autoScroll;
         if (this.panel) {
-            this.panel.webview.postMessage({ 
+            const message: ExtensionToWebviewMessage = { 
                 type: 'updateState',
                 state: { autoScroll }
-            });
+            };
+            this.panel.webview.postMessage(message);
         }
     }
 
-    private handleWebviewMessage(message: any): void {
+    private handleWebviewMessage(message: WebviewToExtensionMessage): void {
         switch (message.type) {
             case 'clear':
                 this.clear();
@@ -124,7 +158,7 @@ export class LogcatWebviewPanel {
                 this.setAutoScroll(!this.autoScroll);
                 break;
             case 'filterByLevel':
-                this.applyFilter({ ...this.currentFilter, minLevel: message.level });
+                this.applyFilter({ ...this.currentFilter, minLevel: message.level ?? undefined });
                 break;
             case 'filterByTag':
                 // Toggle tag filter if clicking the same tag, otherwise set it
@@ -154,7 +188,7 @@ export class LogcatWebviewPanel {
         }
     }
 
-    private applyFilter(filter: typeof this.currentFilter): void {
+    private applyFilter(filter: LogcatFilter): void {
         this.currentFilter = filter;
         
         if (!this.panel) {
@@ -166,10 +200,11 @@ export class LogcatWebviewPanel {
             this.parser.matchesFilter(log, this.currentFilter)
         );
 
-        this.panel.webview.postMessage({
+        const message: ExtensionToWebviewMessage = {
             type: 'replaceAll',
             logs: filteredLogs
-        });
+        };
+        this.panel.webview.postMessage(message);
     }
 
     private copyAllLogs(): void {

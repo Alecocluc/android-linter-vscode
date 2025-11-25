@@ -14,6 +14,8 @@ import { ReferenceProvider } from './referenceProvider';
 import { HoverProvider } from './hoverProvider';
 import { GradleTaskProvider } from './gradleTaskProvider';
 import { AdbWirelessManager } from './adbWirelessManager';
+import { Logger } from './logger';
+import { CONFIG_NAMESPACE, CONFIG_KEYS, COMMANDS, VIEWS, SUPPORTED_LANGUAGES, DEFAULTS } from './constants';
 
 let lintManager: LintManager;
 let diagnosticProvider: DiagnosticProvider;
@@ -25,24 +27,20 @@ let androidExplorerView: AndroidExplorerView;
 let gradleTaskProvider: GradleTaskProvider;
 let adbWirelessManager: AdbWirelessManager;
 let runStatusBarItem: vscode.StatusBarItem;
-
-function log(outputChannel: vscode.OutputChannel, message: string) {
-    const config = vscode.workspace.getConfiguration('android-linter');
-    if (config.get<boolean>('verboseLogging', true)) {
-        outputChannel.appendLine(message);
-    }
-}
+let logger: Logger;
 
 export function activate(context: vscode.ExtensionContext) {
-    const outputChannel = vscode.window.createOutputChannel('Android Linter');
+    // Initialize centralized logger
+    logger = Logger.getInstance();
+    const outputChannel = logger.getOutputChannel();
     
     // Show the output channel so it appears in the dropdown
-    const extensionConfig = vscode.workspace.getConfiguration('android-linter');
-    if (extensionConfig.get<boolean>('verboseLogging', true)) {
-        outputChannel.show(true); // true = preserve focus on editor
+    const extensionConfig = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    if (extensionConfig.get<boolean>(CONFIG_KEYS.VERBOSE_LOGGING, true)) {
+        logger.show(true); // true = preserve focus on editor
     }
     
-    outputChannel.appendLine('🚀 Android Linter extension is now active');
+    logger.start('Android Linter extension is now active');
 
     // Initialize diagnostic collection
     diagnosticProvider = new DiagnosticProvider();
@@ -65,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize Android Explorer View
     androidExplorerView = new AndroidExplorerView(deviceManager, logcatManager, gradleProcessManager, context);
     context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('androidExplorer', androidExplorerView)
+        vscode.window.registerTreeDataProvider(VIEWS.ANDROID_EXPLORER, androidExplorerView)
     );
 
     // Initialize Gradle Task Provider
@@ -73,7 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (workspaceFolder) {
         gradleTaskProvider = new GradleTaskProvider(gradleProcessManager, workspaceFolder);
         context.subscriptions.push(
-            vscode.window.registerTreeDataProvider('gradleTasks', gradleTaskProvider)
+            vscode.window.registerTreeDataProvider(VIEWS.GRADLE_TASKS, gradleTaskProvider)
         );
     }
 
@@ -84,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Refresh devices on startup
     androidExplorerView.refreshDevices().catch(err => {
-        log(outputChannel, `Failed to refresh devices on startup: ${err}`);
+        logger.warn(`Failed to refresh devices on startup: ${err}`);
     });
 
     // Initialize lint manager
@@ -93,14 +91,14 @@ export function activate(context: vscode.ExtensionContext) {
     // Log workspace info
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders) {
-        log(outputChannel, `📁 Workspace folders: ${workspaceFolders.map(f => f.uri.fsPath).join(', ')}`);
+        logger.folder(`Workspace folders: ${workspaceFolders.map(f => f.uri.fsPath).join(', ')}`);
     } else {
-        log(outputChannel, '⚠️ No workspace folder found');
+        logger.warn('No workspace folder found');
     }
 
     // Register commands
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.lintCurrentFile', async () => {
+        vscode.commands.registerCommand(COMMANDS.LINT_CURRENT_FILE, async () => {
             const editor = vscode.window.activeTextEditor;
             if (editor) {
                 await lintManager.lintFile(editor.document);
@@ -111,20 +109,20 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.lintProject', async () => {
+        vscode.commands.registerCommand(COMMANDS.LINT_PROJECT, async () => {
             await lintManager.lintProject();
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.clearDiagnostics', () => {
+        vscode.commands.registerCommand(COMMANDS.CLEAR_DIAGNOSTICS, () => {
             diagnosticProvider.clear();
             vscode.window.showInformationMessage('Lint results cleared');
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.launchOnDevice', async () => {
+        vscode.commands.registerCommand(COMMANDS.LAUNCH_ON_DEVICE, async () => {
             androidExplorerView.setGradleRunning(true);
             try {
                 await appLauncher.launch();
@@ -135,7 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.relaunchApp', async () => {
+        vscode.commands.registerCommand(COMMANDS.RELAUNCH_APP, async () => {
             androidExplorerView.setGradleRunning(true);
             try {
                 await appLauncher.relaunchApp();
@@ -146,26 +144,26 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.debugApp', async () => {
+        vscode.commands.registerCommand(COMMANDS.DEBUG_APP, async () => {
             await appLauncher.debugApp();
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.stopApp', async () => {
+        vscode.commands.registerCommand(COMMANDS.STOP_APP, async () => {
             await appLauncher.stopApp();
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.showLogcat', async () => {
+        vscode.commands.registerCommand(COMMANDS.SHOW_LOGCAT, async () => {
             await appLauncher.startLogcatSession();
             androidExplorerView.setLogcatRunning(true);
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.stopLogcat', async () => {
+        vscode.commands.registerCommand(COMMANDS.STOP_LOGCAT, async () => {
             await appLauncher.stopLogcat();
             androidExplorerView.setLogcatRunning(false);
         })
@@ -173,20 +171,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Register Android Explorer commands
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.refreshDevices', async () => {
+        vscode.commands.registerCommand(COMMANDS.REFRESH_DEVICES, async () => {
             await androidExplorerView.refreshDevices();
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.selectDevice', async (device) => {
+        vscode.commands.registerCommand(COMMANDS.SELECT_DEVICE, async (device) => {
             androidExplorerView.setSelectedDevice(device);
             vscode.window.showInformationMessage(`Selected device: ${device.label}`);
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.clearLogcat', () => {
+        vscode.commands.registerCommand(COMMANDS.CLEAR_LOGCAT, () => {
             logcatManager.clearWebview();
             vscode.window.showInformationMessage('Logcat cleared');
         })
@@ -194,7 +192,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Gradle Task Commands
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.runGradleTask', async (taskName: string) => {
+        vscode.commands.registerCommand(COMMANDS.RUN_GRADLE_TASK, async (taskName: string) => {
             if (!workspaceFolder) return;
             
             // If no task name passed (e.g. from palette), prompt for it
@@ -221,7 +219,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.syncProject', async () => {
+        vscode.commands.registerCommand(COMMANDS.SYNC_PROJECT, async () => {
             if (gradleTaskProvider) {
                 await gradleTaskProvider.refreshTasks();
                 vscode.window.showInformationMessage('Gradle Project Synced & Tasks Refreshed');
@@ -231,7 +229,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ADB Wireless Commands
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.adbConnect', async () => {
+        vscode.commands.registerCommand(COMMANDS.ADB_CONNECT, async () => {
             await adbWirelessManager.connect();
             // Refresh devices after connection attempt
             setTimeout(() => androidExplorerView.refreshDevices(), 2000);
@@ -239,18 +237,91 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('android-linter.adbPair', async () => {
+        vscode.commands.registerCommand(COMMANDS.ADB_PAIR, async () => {
             await adbWirelessManager.pair();
         })
     );
 
+    // Extract String Resource command (for code actions)
+    context.subscriptions.push(
+        vscode.commands.registerCommand(COMMANDS.EXTRACT_STRING, async (uri: vscode.Uri, range: vscode.Range) => {
+            const document = await vscode.workspace.openTextDocument(uri);
+            const text = document.getText(range);
+            
+            // Prompt for resource name
+            const resourceName = await vscode.window.showInputBox({
+                prompt: 'Enter the string resource name',
+                placeHolder: 'my_string_name',
+                validateInput: (value) => {
+                    if (!value) return 'Resource name is required';
+                    if (!/^[a-z][a-z0-9_]*$/.test(value)) {
+                        return 'Resource name must start with lowercase letter and contain only lowercase letters, numbers, and underscores';
+                    }
+                    return null;
+                }
+            });
+
+            if (!resourceName) return;
+
+            // Find strings.xml
+            const workspaceRoot = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+            if (!workspaceRoot) {
+                vscode.window.showErrorMessage('No workspace folder found');
+                return;
+            }
+
+            const stringsXmlPaths = [
+                path.join(workspaceRoot, 'app', 'src', 'main', 'res', 'values', 'strings.xml'),
+                path.join(workspaceRoot, 'src', 'main', 'res', 'values', 'strings.xml'),
+            ];
+
+            let stringsXmlPath: string | undefined;
+            for (const p of stringsXmlPaths) {
+                if (fs.existsSync(p)) {
+                    stringsXmlPath = p;
+                    break;
+                }
+            }
+
+            if (!stringsXmlPath) {
+                vscode.window.showErrorMessage('Could not find strings.xml file');
+                return;
+            }
+
+            // Read and update strings.xml
+            try {
+                let stringsContent = fs.readFileSync(stringsXmlPath, 'utf8');
+                
+                // Clean the text value
+                const cleanText = text.replace(/^["']|["']$/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                // Add the new string before </resources>
+                const newString = `    <string name="${resourceName}">${cleanText}</string>\n`;
+                stringsContent = stringsContent.replace('</resources>', `${newString}</resources>`);
+                
+                fs.writeFileSync(stringsXmlPath, stringsContent, 'utf8');
+                
+                // Replace the original text with the resource reference
+                const edit = new vscode.WorkspaceEdit();
+                const isXml = document.languageId === 'xml';
+                const replacement = isXml ? `@string/${resourceName}` : `R.string.${resourceName}`;
+                edit.replace(uri, range, replacement);
+                await vscode.workspace.applyEdit(edit);
+                
+                vscode.window.showInformationMessage(`String extracted to @string/${resourceName}`);
+            } catch (error) {
+                vscode.window.showErrorMessage(`Failed to extract string: ${error}`);
+            }
+        })
+    );
+
     // Optional status bar item (now we have the Android Explorer panel)
-    const showStatusBar = vscode.workspace.getConfiguration('android-linter').get<boolean>('showStatusBar', false);
+    const showStatusBar = vscode.workspace.getConfiguration(CONFIG_NAMESPACE).get<boolean>(CONFIG_KEYS.SHOW_STATUS_BAR, false);
     if (showStatusBar) {
         runStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
         runStatusBarItem.text = '$(debug-start) Run on Android';
         runStatusBarItem.tooltip = 'Install Debug build and launch on a connected device';
-        runStatusBarItem.command = 'android-linter.launchOnDevice';
+        runStatusBarItem.command = COMMANDS.LAUNCH_ON_DEVICE;
         runStatusBarItem.show();
         context.subscriptions.push(runStatusBarItem);
     }
@@ -259,7 +330,7 @@ export function activate(context: vscode.ExtensionContext) {
     const codeActionProvider = new CodeActionProvider();
     context.subscriptions.push(
         vscode.languages.registerCodeActionsProvider(
-            ['kotlin', 'java', 'xml'],
+            [...SUPPORTED_LANGUAGES],
             codeActionProvider,
             {
                 providedCodeActionKinds: CodeActionProvider.providedCodeActionKinds
@@ -286,7 +357,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Register hover provider to show references in tooltip (optional, disabled by default)
-    const enableHover = vscode.workspace.getConfiguration('android-linter').get<boolean>('enableHoverReferences', false);
+    const enableHover = vscode.workspace.getConfiguration(CONFIG_NAMESPACE).get<boolean>(CONFIG_KEYS.ENABLE_HOVER_REFERENCES, false);
     if (enableHover) {
         const hoverProvider = new HoverProvider();
         context.subscriptions.push(
@@ -295,19 +366,19 @@ export function activate(context: vscode.ExtensionContext) {
                 hoverProvider
             )
         );
-        outputChannel.appendLine('✅ Registered code navigation providers (Go to Definition, Find References, Hover)');
+        logger.success('Registered code navigation providers (Go to Definition, Find References, Hover)');
     } else {
-        outputChannel.appendLine('✅ Registered code navigation providers (Go to Definition, Find References)');
-        outputChannel.appendLine('💡 Tip: Enable "android-linter.enableHoverReferences" to show references on hover');
+        logger.success('Registered code navigation providers (Go to Definition, Find References)');
+        logger.log('💡 Tip: Enable "android-linter.enableHoverReferences" to show references on hover');
     }
 
     // Listen to file open events
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(async (document) => {
-            log(outputChannel, `📄 File opened: ${document.fileName} (language: ${document.languageId})`);
-            const config = vscode.workspace.getConfiguration('android-linter');
-            if (config.get<boolean>('lintOnOpen') && isAndroidFile(document)) {
-                log(outputChannel, `   ▶️ Running lint on ${document.fileName}`);
+            logger.file(`File opened: ${document.fileName} (language: ${document.languageId})`);
+            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && isAndroidFile(document)) {
+                logger.log(`   ▶️ Running lint on ${document.fileName}`);
                 await lintManager.lintFile(document);
             }
         })
@@ -316,8 +387,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Listen to file save events
     context.subscriptions.push(
         vscode.workspace.onDidSaveTextDocument(async (document) => {
-            const config = vscode.workspace.getConfiguration('android-linter');
-            if (config.get<boolean>('lintOnSave') && isAndroidFile(document)) {
+            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_SAVE) && isAndroidFile(document)) {
                 await lintManager.lintFile(document);
             }
 
@@ -328,7 +399,7 @@ export function activate(context: vscode.ExtensionContext) {
                    'Sync', 'Later'
                );
                if (selection === 'Sync') {
-                   vscode.commands.executeCommand('android-linter.syncProject');
+                   vscode.commands.executeCommand(COMMANDS.SYNC_PROJECT);
                }
             }
         })
@@ -338,12 +409,12 @@ export function activate(context: vscode.ExtensionContext) {
     let changeTimeout: NodeJS.Timeout | undefined;
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => {
-            const config = vscode.workspace.getConfiguration('android-linter');
-            if (config.get<boolean>('lintOnChange') && isAndroidFile(event.document)) {
+            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_CHANGE) && isAndroidFile(event.document)) {
                 if (changeTimeout) {
                     clearTimeout(changeTimeout);
                 }
-                const delay = config.get<number>('debounceDelay') || 2000;
+                const delay = config.get<number>(CONFIG_KEYS.DEBOUNCE_DELAY) || DEFAULTS.DEBOUNCE_DELAY;
                 changeTimeout = setTimeout(async () => {
                     await lintManager.lintFile(event.document);
                 }, delay);
@@ -352,8 +423,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Lint currently open files on activation
-    const config = vscode.workspace.getConfiguration('android-linter');
-    if (config.get<boolean>('lintOnOpen')) {
+    const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN)) {
         vscode.workspace.textDocuments.forEach(async (document) => {
             if (isAndroidFile(document)) {
                 await lintManager.lintFile(document);

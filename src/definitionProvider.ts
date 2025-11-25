@@ -1,15 +1,19 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { FILE_PATTERNS, DEFAULTS } from './constants';
 
 /**
  * Provides "Go to Definition" functionality for Kotlin/Java code.
  * Allows Ctrl+Click to navigate to function, class, or variable definitions.
  * When multiple definitions exist, VS Code will show a peek window to choose.
+ * 
+ * This provider first attempts to use VS Code's built-in workspace symbol provider
+ * for better accuracy, then falls back to regex-based search.
  */
 export class DefinitionProvider implements vscode.DefinitionProvider {
-    private cache: Map<string, vscode.Location[]> = new Map();
-    private cacheTimeout = 30000; // 30 seconds
+    private cache: Map<string, { locations: vscode.Location[], timestamp: number }> = new Map();
+    private readonly cacheTimeout = DEFAULTS.DEFINITION_CACHE_TIMEOUT;
     
     async provideDefinition(
         document: vscode.TextDocument,
@@ -147,13 +151,11 @@ export class DefinitionProvider implements vscode.DefinitionProvider {
         token: vscode.CancellationToken
     ): Promise<vscode.Location[] | undefined> {
         
-        // Check cache first
+        // Check cache first (with timestamp validation)
         const cacheKey = `${symbol}_${symbolType}`;
-        if (this.cache.has(cacheKey)) {
-            const cached = this.cache.get(cacheKey);
-            if (cached && cached.length > 0) {
-                return cached;
-            }
+        const cached = this.cache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp) < this.cacheTimeout) {
+            return cached.locations;
         }
 
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(currentDocument.uri);
@@ -161,6 +163,79 @@ export class DefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
+        const locations: vscode.Location[] = [];
+
+        // Try VS Code's built-in workspace symbol provider first
+        try {
+            const symbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
+                'vscode.executeWorkspaceSymbolProvider',
+                symbol
+            );
+
+            if (symbols && symbols.length > 0 && !token.isCancellationRequested) {
+                for (const sym of symbols) {
+                    if (sym.name === symbol) {
+                        // Check if this matches the expected symbol type
+                        const matchesType = this.symbolKindMatchesType(sym.kind, symbolType);
+                        if (matchesType || symbolType === 'unknown') {
+                            if (!this.isDuplicateLocation(locations, sym.location)) {
+                                locations.push(sym.location);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Symbol provider not available, continue with fallback
+        }
+
+        if (token.isCancellationRequested) {
+            return locations.length > 0 ? locations : undefined;
+        }
+
+        // Fall back to regex-based search for comprehensive coverage
+        const regexLocations = await this.findDefinitionByRegex(symbol, symbolType, token);
+        for (const loc of regexLocations) {
+            if (!this.isDuplicateLocation(locations, loc)) {
+                locations.push(loc);
+            }
+        }
+
+        // Cache the results
+        if (locations.length > 0) {
+            this.cache.set(cacheKey, { locations, timestamp: Date.now() });
+        }
+
+        return locations.length > 0 ? locations : undefined;
+    }
+
+    private symbolKindMatchesType(kind: vscode.SymbolKind, symbolType: string): boolean {
+        switch (symbolType) {
+            case 'function':
+                return kind === vscode.SymbolKind.Function || kind === vscode.SymbolKind.Method;
+            case 'class':
+                return kind === vscode.SymbolKind.Class || kind === vscode.SymbolKind.Interface || 
+                       kind === vscode.SymbolKind.Enum || kind === vscode.SymbolKind.Struct;
+            case 'variable':
+                return kind === vscode.SymbolKind.Variable || kind === vscode.SymbolKind.Constant ||
+                       kind === vscode.SymbolKind.Field || kind === vscode.SymbolKind.Property;
+            default:
+                return true;
+        }
+    }
+
+    private isDuplicateLocation(existing: vscode.Location[], newLoc: vscode.Location): boolean {
+        return existing.some(loc => 
+            loc.uri.toString() === newLoc.uri.toString() && 
+            loc.range.start.line === newLoc.range.start.line
+        );
+    }
+
+    private async findDefinitionByRegex(
+        symbol: string,
+        symbolType: string,
+        token: vscode.CancellationToken
+    ): Promise<vscode.Location[]> {
         const locations: vscode.Location[] = [];
 
         // Search patterns based on symbol type
@@ -222,13 +297,13 @@ export class DefinitionProvider implements vscode.DefinitionProvider {
         try {
             // Get all Kotlin and Java files
             const results = await vscode.workspace.findFiles(
-                '**/*.{kt,java}',
-                '**/node_modules/**',
-                200 // Increased limit
+                FILE_PATTERNS.KOTLIN_JAVA,
+                FILE_PATTERNS.EXCLUDE_NODE_MODULES,
+                DEFAULTS.MAX_FILE_SEARCH_RESULTS
             );
 
             if (token.isCancellationRequested) {
-                return undefined;
+                return locations;
             }
 
             // Search through files
@@ -240,6 +315,12 @@ export class DefinitionProvider implements vscode.DefinitionProvider {
                 try {
                     const fileContent = await vscode.workspace.fs.readFile(fileUri);
                     const text = Buffer.from(fileContent).toString('utf8');
+                    
+                    // Skip binary or very large files
+                    if (this.isBinaryContent(text) || text.length > 500000) {
+                        continue;
+                    }
+                    
                     const lines = text.split('\n');
 
                     // Try each pattern
@@ -284,25 +365,20 @@ export class DefinitionProvider implements vscode.DefinitionProvider {
                             }
                         }
                     }
-                } catch (error) {
+                } catch {
                     // Skip files that can't be read
                     continue;
                 }
             }
-
-            // Cache the results
-            if (locations.length > 0) {
-                this.cache.set(cacheKey, locations);
-                // Clear cache after timeout
-                setTimeout(() => this.cache.delete(cacheKey), this.cacheTimeout);
-            }
-
         } catch (error) {
-            console.error('Error finding definition:', error);
-            return undefined;
+            // Silently handle errors - definition lookup is best-effort
         }
 
-        return locations.length > 0 ? locations : undefined;
+        return locations;
+    }
+
+    private isBinaryContent(content: string): boolean {
+        return content.includes('\0');
     }
 
     private escapeRegex(str: string): string {

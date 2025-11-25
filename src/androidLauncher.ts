@@ -3,12 +3,14 @@ import { GradleCommandError, GradleProcessManager } from './gradleProcessManager
 import { AndroidDevice, AndroidDeviceManager } from './androidDeviceManager';
 import { LogcatManager } from './logcatManager';
 import { detectApplicationId, resolveManifestLauncher } from './androidProjectInfo';
+import { CONFIG_NAMESPACE, CONFIG_KEYS } from './constants';
+import { Logger } from './logger';
 
 export class AndroidAppLauncher implements vscode.Disposable {
     private readonly gradleManager: GradleProcessManager;
     private readonly deviceManager: AndroidDeviceManager;
     private readonly logcatManager: LogcatManager;
-    private readonly outputChannel: vscode.OutputChannel;
+    private readonly logger: Logger;
     private lastDeviceId?: string;
     private onAppIdDetected?: (appId: string) => void;
 
@@ -21,7 +23,7 @@ export class AndroidAppLauncher implements vscode.Disposable {
         this.gradleManager = gradleManager;
         this.deviceManager = deviceManager;
         this.logcatManager = logcatManager;
-        this.outputChannel = outputChannel;
+        this.logger = Logger.create(outputChannel, 'Launcher');
     }
 
     public setAppIdCallback(callback: (appId: string) => void): void {
@@ -59,11 +61,11 @@ export class AndroidAppLauncher implements vscode.Disposable {
             this.onAppIdDetected(applicationId);
         }
 
-        const config = vscode.workspace.getConfiguration('android-linter');
-        const installTask = config.get<string>('launchInstallTask') || 'installDebug';
-        const installTimeout = config.get<number>('launchInstallTimeoutMs') || 240000;
-        const autoStartLogcat = config.get<boolean>('logcatAutoStartOnLaunch', true);
-        const moduleName = config.get<string>('launchModule') || 'app';
+        const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+        const installTask = config.get<string>(CONFIG_KEYS.LAUNCH_INSTALL_TASK) || 'installDebug';
+        const installTimeout = config.get<number>(CONFIG_KEYS.LAUNCH_INSTALL_TIMEOUT_MS) || 240000;
+        const autoStartLogcat = config.get<boolean>(CONFIG_KEYS.LOGCAT_AUTO_START_ON_LAUNCH, true);
+        const moduleName = config.get<string>(CONFIG_KEYS.LAUNCH_MODULE) || 'app';
 
         let wasCancelled = false;
 
@@ -91,14 +93,14 @@ export class AndroidAppLauncher implements vscode.Disposable {
             );
 
             if (wasCancelled) {
-                this.log('⚪ Installation cancelled');
+                this.logger.log('⚪ Installation cancelled');
                 return;
             }
 
-            this.log(`✅ Gradle task ${installTask} completed`);
+            this.logger.success(`Gradle task ${installTask} completed`);
         } catch (error) {
             if (wasCancelled) {
-                this.log('⚪ Installation cancelled');
+                this.logger.log('⚪ Installation cancelled');
                 return;
             }
 
@@ -108,7 +110,7 @@ export class AndroidAppLauncher implements vscode.Disposable {
             }
 
             if (error instanceof GradleCommandError) {
-                this.log(`❌ Gradle install failed: ${error.stderr || error.stdout}`);
+                this.logger.error(`Gradle install failed: ${error.stderr || error.stdout}`);
             }
 
             vscode.window.showErrorMessage('Android Linter: Failed to install debug build. Check Output for details.');
@@ -131,7 +133,7 @@ export class AndroidAppLauncher implements vscode.Disposable {
             }
         } catch (launchError) {
             const message = launchError instanceof Error ? launchError.message : String(launchError);
-            this.log(`❌ Failed to launch app: ${message}`);
+            this.logger.error(`Failed to launch app: ${message}`);
             vscode.window.showErrorMessage('Android Linter: Failed to launch the application.');
             return;
         }
@@ -176,10 +178,10 @@ export class AndroidAppLauncher implements vscode.Disposable {
     }
 
     public async relaunchApp(): Promise<void> {
-        this.log('🔄 Relaunching app...');
+        this.logger.log('🔄 Relaunching app...');
         await this.stopApp();
         await this.launch();
-        this.log('✅ Relaunch complete');
+        this.logger.success('Relaunch complete');
     }
 
     public async stopApp(): Promise<void> {
@@ -201,7 +203,7 @@ export class AndroidAppLauncher implements vscode.Disposable {
             return;
         }
 
-        this.log(`🛑 Stopping app: ${applicationId} on ${deviceId}`);
+        this.logger.stop(`Stopping app: ${applicationId} on ${deviceId}`);
         await this.deviceManager.forceStop(deviceId, applicationId);
         vscode.window.showInformationMessage(`App ${applicationId} stopped.`);
     }
@@ -236,13 +238,13 @@ export class AndroidAppLauncher implements vscode.Disposable {
     }
 
     private async resolveApplicationId(workspaceRoot: string): Promise<string | undefined> {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        const fromSettings = (config.get<string>('launchApplicationId') || '').trim();
+        const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+        const fromSettings = (config.get<string>(CONFIG_KEYS.LAUNCH_APPLICATION_ID) || '').trim();
         if (fromSettings) {
             return fromSettings;
         }
 
-        const moduleName = config.get<string>('launchModule') || 'app';
+        const moduleName = config.get<string>(CONFIG_KEYS.LAUNCH_MODULE) || 'app';
         const detected = await detectApplicationId(workspaceRoot, moduleName);
         if (detected) {
             return detected;
@@ -255,20 +257,13 @@ export class AndroidAppLauncher implements vscode.Disposable {
         });
 
         if (provided) {
-            const remember = config.get<boolean>('launchRememberApplicationId', true);
+            const remember = config.get<boolean>(CONFIG_KEYS.LAUNCH_REMEMBER_APPLICATION_ID, true);
             if (remember) {
-                await config.update('launchApplicationId', provided.trim(), vscode.ConfigurationTarget.Workspace);
+                await config.update(CONFIG_KEYS.LAUNCH_APPLICATION_ID, provided.trim(), vscode.ConfigurationTarget.Workspace);
             }
             return provided.trim();
         }
 
         return undefined;
-    }
-
-    private log(message: string): void {
-        const config = vscode.workspace.getConfiguration('android-linter');
-        if (config.get<boolean>('verboseLogging', true)) {
-            this.outputChannel.appendLine(message);
-        }
     }
 }
