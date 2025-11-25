@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2025-11-25
+
+### 🔧 Refactoring & Improvements
+
+#### Added
+- **Centralized Logger** - New `Logger` class for consistent logging across all modules
+  - Semantic log methods (`success()`, `error()`, `warn()`, `build()`, `stop()`, etc.)
+  - Automatic verbose mode support via settings
+  - Consistent emoji prefixes for better log readability
+
+- **Constants Module** - Extracted all magic strings to `constants.ts`
+  - `CONFIG_NAMESPACE` and `CONFIG_KEYS` for type-safe configuration access
+  - `COMMANDS` and `VIEWS` for command/view identifiers
+  - `DEFAULTS` and `FILE_PATTERNS` for common values
+
+- **Extract String Resource Command** - New refactoring action
+  - Extract hardcoded strings to `strings.xml`
+  - Automatically replaces with `@string/` or `R.string.` reference
+
+#### Changed
+- **Improved Activation Events** - Extension now activates only for Android projects
+  - Triggers on `build.gradle`, `build.gradle.kts`, or `AndroidManifest.xml`
+  - Activates on Kotlin/Java file open
+  - Reduces VS Code startup time for non-Android workspaces
+
+- **Enhanced Definition & Reference Providers**
+  - Now uses VS Code's built-in workspace symbol provider first
+  - Falls back to regex-based search for comprehensive coverage
+  - Added caching with timestamp validation
+  - Skip binary files and common keywords for better performance
+
+- **Type-Safe Webview Messaging** - `logcatWebview.ts` improvements
+  - Added `WebviewToExtensionMessage` and `ExtensionToWebviewMessage` types
+  - Extracted `LogcatFilter` interface
+
+#### Fixed
+- Fixed unreachable code in `gradleLintRunner.ts` error handling
+- Fixed missing `await` on `withProgress` calls in `adbWirelessManager.ts`
+- Removed duplicate `log()` methods across multiple files (now use `Logger`)
+
+### Internal
+- Removed scattered logging functions in favor of centralized `Logger` class
+- Configuration access now uses constants instead of hardcoded strings
+- Better error handling flow in Gradle lint result parsing
+
 ## [0.1.0] - 2025-10-31
 
 ### 🎉 Major UI Overhaul
