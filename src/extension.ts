@@ -12,7 +12,6 @@ import { AndroidExplorerView } from './androidExplorerView';
 import { DefinitionProvider } from './definitionProvider';
 import { ReferenceProvider } from './referenceProvider';
 import { HoverProvider } from './hoverProvider';
-import { GradleTaskProvider } from './gradleTaskProvider';
 import { AdbWirelessManager } from './adbWirelessManager';
 import { Logger } from './logger';
 import { CONFIG_NAMESPACE, CONFIG_KEYS, COMMANDS, VIEWS, SUPPORTED_LANGUAGES, DEFAULTS } from './constants';
@@ -24,7 +23,6 @@ let deviceManager: AndroidDeviceManager;
 let logcatManager: LogcatManager;
 let appLauncher: AndroidAppLauncher;
 let androidExplorerView: AndroidExplorerView;
-let gradleTaskProvider: GradleTaskProvider;
 let adbWirelessManager: AdbWirelessManager;
 let runStatusBarItem: vscode.StatusBarItem;
 let logger: Logger;
@@ -65,15 +63,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.window.registerTreeDataProvider(VIEWS.ANDROID_EXPLORER, androidExplorerView)
     );
-
-    // Initialize Gradle Task Provider
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (workspaceFolder) {
-        gradleTaskProvider = new GradleTaskProvider(gradleProcessManager, workspaceFolder);
-        context.subscriptions.push(
-            vscode.window.registerTreeDataProvider(VIEWS.GRADLE_TASKS, gradleTaskProvider)
-        );
-    }
 
     // Connect app launcher to explorer view for status updates
     appLauncher.setAppIdCallback((appId) => {
@@ -187,43 +176,6 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(COMMANDS.CLEAR_LOGCAT, () => {
             logcatManager.clearWebview();
             vscode.window.showInformationMessage('Logcat cleared');
-        })
-    );
-
-    // Gradle Task Commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand(COMMANDS.RUN_GRADLE_TASK, async (taskName: string) => {
-            if (!workspaceFolder) return;
-            
-            // If no task name passed (e.g. from palette), prompt for it
-            const task = taskName || await vscode.window.showInputBox({
-                placeHolder: 'assembleDebug',
-                prompt: 'Enter the Gradle task to run',
-            });
-
-            if (!task) return;
-
-            androidExplorerView.setGradleRunning(true);
-            try {
-                const terminal = vscode.window.createTerminal(`Gradle: ${task}`);
-                terminal.show();
-                
-                // Use the proper wrapper based on platform
-                const wrapper = process.platform === 'win32' ? '.\\gradlew.bat' : './gradlew';
-                terminal.sendText(`${wrapper} ${task}`);
-                
-            } finally {
-                androidExplorerView.setGradleRunning(false);
-            }
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(COMMANDS.SYNC_PROJECT, async () => {
-            if (gradleTaskProvider) {
-                await gradleTaskProvider.refreshTasks();
-                vscode.window.showInformationMessage('Gradle Project Synced & Tasks Refreshed');
-            }
         })
     );
 
@@ -390,17 +342,6 @@ export function activate(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
             if (config.get<boolean>(CONFIG_KEYS.LINT_ON_SAVE) && isAndroidFile(document)) {
                 await lintManager.lintFile(document);
-            }
-
-            // Auto-sync on build.gradle changes?
-            if (document.fileName.endsWith('.gradle') || document.fileName.endsWith('.gradle.kts')) {
-               const selection = await vscode.window.showInformationMessage(
-                   'Gradle file changed. Sync project?',
-                   'Sync', 'Later'
-               );
-               if (selection === 'Sync') {
-                   vscode.commands.executeCommand(COMMANDS.SYNC_PROJECT);
-               }
             }
         })
     );

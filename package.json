@@ -45,11 +45,6 @@
           "id": "androidExplorer",
           "name": "Android Explorer",
           "icon": "images/android-icon.svg"
-        },
-        {
-          "id": "gradleTasks",
-          "name": "Gradle Tasks",
-          "icon": "images/android-icon.svg"
         }
       ]
     },
@@ -92,15 +87,6 @@
         "title": "Android: Clear Logcat"
       },
       {
-        "command": "android-linter.runGradleTask",
-        "title": "Android: Run Gradle Task"
-      },
-      {
-        "command": "android-linter.syncProject",
-        "title": "Android: Sync Project (Refresh Tasks)",
-        "icon": "$(sync)"
-      },
-      {
         "command": "android-linter.adbConnect",
         "title": "Android: Connect via Wi-Fi (IP:Port)"
       },
@@ -118,11 +104,6 @@
         {
           "command": "android-linter.refreshDevices",
           "when": "view == androidExplorer",
-          "group": "navigation"
-        },
-        {
-          "command": "android-linter.syncProject",
-          "when": "view == gradleTasks",
           "group": "navigation"
         }
       ]
@@ -361,7 +342,7 @@
   "devDependencies": {
     "@types/node": "^24.x",
     "@types/vscode": "^1.106.1",
-  "@types/sax": "^1.2.7",
+    "@types/sax": "^1.2.7",
     "@typescript-eslint/eslint-plugin": "^8.x",
     "@typescript-eslint/parser": "^8.x",
     "esbuild": "^0.27.0",
@@ -370,6 +351,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-  "sax": "^1.4.3"
+    "sax": "^1.4.3"
   }
 }

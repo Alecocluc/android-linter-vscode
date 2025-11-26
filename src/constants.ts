@@ -71,8 +71,6 @@ export const COMMANDS = {
     CLEAR_LOGCAT: 'android-linter.clearLogcat',
     REFRESH_DEVICES: 'android-linter.refreshDevices',
     SELECT_DEVICE: 'android-linter.selectDevice',
-    RUN_GRADLE_TASK: 'android-linter.runGradleTask',
-    SYNC_PROJECT: 'android-linter.syncProject',
     ADB_CONNECT: 'android-linter.adbConnect',
     ADB_PAIR: 'android-linter.adbPair',
     EXTRACT_STRING: 'android-linter.extractString',
@@ -81,7 +79,6 @@ export const COMMANDS = {
 // View IDs
 export const VIEWS = {
     ANDROID_EXPLORER: 'androidExplorer',
-    GRADLE_TASKS: 'gradleTasks',
 } as const;
 
 // Output channel names
