@@ -55,6 +55,11 @@ export const CONFIG_KEYS = {
     GRADLE_DAEMON_IDLE_TIMEOUT_MS: 'gradleDaemonIdleTimeoutMs',
     GRADLE_JVM_ARGS: 'gradleJvmArgs',
     GRADLE_MAX_WORKERS: 'gradleMaxWorkers',
+    
+    // Lint server settings (fast mode)
+    LINT_MODE: 'lintMode',
+    JAVA_PATH: 'javaPath',
+    LINT_SERVER_AUTO_START: 'lintServerAutoStart',
 } as const;
 
 // Command IDs

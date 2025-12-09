@@ -3,3 +3,9 @@ out
 *.vsix
 .vscode-test
 .DS_Store
+
+# Lint server
+lint-server/.gradle
+lint-server/build
+lint-server/gradle/wrapper/gradle-wrapper.jar
+lint-server/*.jar

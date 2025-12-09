@@ -1,29 +1,76 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DiagnosticProvider, LintIssue } from './diagnosticProvider';
-import { GradleLintRunner } from './gradleLintRunner';
+import { HybridLintRunner } from './hybridLintRunner';
 import { GradleProcessManager } from './gradleProcessManager';
 import { CONFIG_NAMESPACE, CONFIG_KEYS, OUTPUT_CHANNELS } from './constants';
 import { Logger } from './logger';
 
 export class LintManager implements vscode.Disposable {
     private diagnosticProvider: DiagnosticProvider;
-    private gradleLintRunner: GradleLintRunner;
+    private lintRunner: HybridLintRunner;
     private logger: Logger;
     private pendingLints: Map<string, { document: vscode.TextDocument; requestId: number }> = new Map();
     private queuePromise: Promise<void> | undefined;
     private isDisposed = false;
     private latestRequestId = 0;
+    private extensionPath: string;
 
     constructor(
         diagnosticProvider: DiagnosticProvider,
         gradleManager: GradleProcessManager,
+        extensionPath: string,
         outputChannel?: vscode.OutputChannel
     ) {
         this.diagnosticProvider = diagnosticProvider;
+        this.extensionPath = extensionPath;
         const channel = outputChannel || vscode.window.createOutputChannel(OUTPUT_CHANNELS.MAIN);
         this.logger = Logger.create(channel, 'LintManager');
-        this.gradleLintRunner = new GradleLintRunner(gradleManager, channel);
+        this.lintRunner = new HybridLintRunner(extensionPath, gradleManager, channel);
+    }
+
+    /**
+     * Initialize the lint server for the current workspace
+     */
+    public async initializeLintServer(): Promise<boolean> {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            return false;
+        }
+
+        const workspaceFolder = workspaceFolders[0];
+        return this.lintRunner.initializeForProject(workspaceFolder.uri.fsPath);
+    }
+
+    /**
+     * Check if fast mode (lint server) is active
+     */
+    public isFastModeActive(): boolean {
+        return this.lintRunner.isFastModeActive();
+    }
+
+    /**
+     * Get the current lint runner status
+     */
+    public getLintStatus(): {
+        mode: string;
+        serverAvailable: boolean;
+        serverInitialized: boolean;
+        fastModeActive: boolean;
+    } {
+        return this.lintRunner.getStatus();
+    }
+
+    /**
+     * Force refresh the lint server cache
+     */
+    public async forceRefresh(): Promise<void> {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            return;
+        }
+
+        await this.lintRunner.forceRefresh(workspaceFolders[0].uri.fsPath);
     }
 
     public async lintFile(document: vscode.TextDocument): Promise<void> {
@@ -82,18 +129,23 @@ export class LintManager implements vscode.Disposable {
 
         try {
             // Show progress
+            const progressTitle = this.lintRunner.isFastModeActive() 
+                ? `⚡ Analyzing ${path.basename(document.fileName)}...`
+                : `Linting ${path.basename(document.fileName)}...`;
+            
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Window,
-                    title: `Linting ${path.basename(document.fileName)}...`,
+                    title: progressTitle,
                     cancellable: false
                 },
                 async () => {
-                    // Run Android Lint (which also catches compilation errors)
-                    this.logger.log(`Running Android Lint and compilation check...`);
-                    issues = await this.gradleLintRunner.lintFile(
+                    // Run Android Lint using hybrid runner (server or Gradle)
+                    this.logger.log(`Running Android Lint analysis...`);
+                    issues = await this.lintRunner.lintFile(
                         workspaceFolder.uri.fsPath,
-                        document.uri.fsPath
+                        document.uri.fsPath,
+                        document.getText()
                     );
                     
                     // Count errors vs warnings
@@ -146,18 +198,22 @@ export class LintManager implements vscode.Disposable {
         const workspaceFolder = workspaceFolders[0];
 
         try {
+            const progressTitle = this.lintRunner.isFastModeActive()
+                ? '⚡ Fast analyzing entire project...'
+                : 'Running Android Lint on entire project...';
+            
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
-                    title: 'Running Android Lint on entire project...',
+                    title: progressTitle,
                     cancellable: true
                 },
                 async (progress, token) => {
                     // Clear existing diagnostics
                     this.diagnosticProvider.clear();
 
-                    // Run full project lint
-                    const issues = await this.gradleLintRunner.lintProject(
+                    // Run full project lint using hybrid runner
+                    const issues = await this.lintRunner.lintProject(
                         workspaceFolder.uri.fsPath,
                         token
                     );
@@ -189,7 +245,7 @@ export class LintManager implements vscode.Disposable {
     }
 
     public dispose(): void {
-        this.gradleLintRunner.dispose();
+        this.lintRunner.dispose();
         this.pendingLints.clear();
         this.isDisposed = true;
     }

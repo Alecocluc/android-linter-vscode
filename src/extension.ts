@@ -14,6 +14,7 @@ import { ReferenceProvider } from './referenceProvider';
 import { HoverProvider } from './hoverProvider';
 import { AdbWirelessManager } from './adbWirelessManager';
 import { Logger } from './logger';
+import { disposeLintServerClient } from './lintServerClient';
 import { CONFIG_NAMESPACE, CONFIG_KEYS, COMMANDS, VIEWS, SUPPORTED_LANGUAGES, DEFAULTS } from './constants';
 
 let lintManager: LintManager;
@@ -75,7 +76,21 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Initialize lint manager
-    lintManager = new LintManager(diagnosticProvider, gradleProcessManager, outputChannel);
+    lintManager = new LintManager(diagnosticProvider, gradleProcessManager, context.extensionPath, outputChannel);
+    
+    // Initialize lint server if configured for auto-start
+    const lintConfig = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    if (lintConfig.get<boolean>(CONFIG_KEYS.LINT_SERVER_AUTO_START, true)) {
+        lintManager.initializeLintServer().then(success => {
+            if (success) {
+                logger.info('Android Lint Server started successfully - fast lint mode enabled');
+            } else {
+                logger.info('Android Lint Server not available - using Gradle lint fallback');
+            }
+        }).catch(err => {
+            logger.warn(`Failed to initialize lint server: ${err}`);
+        });
+    }
     
     // Log workspace info
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -393,6 +408,9 @@ export function deactivate() {
     if (runStatusBarItem) {
         runStatusBarItem.dispose();
     }
+    
+    // Dispose lint server client
+    disposeLintServerClient();
 }
 
 function isAndroidFile(document: vscode.TextDocument): boolean {
