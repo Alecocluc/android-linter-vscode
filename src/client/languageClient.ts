@@ -99,6 +99,10 @@ export class LanguageClientManager implements vscode.Disposable {
                 { scheme: 'file', language: 'kotlin' },
                 { scheme: 'file', language: 'java' },
                 { scheme: 'file', language: 'xml' },
+                { scheme: 'file', language: 'plaintext', pattern: '**/*.kt' },
+                { scheme: 'file', language: 'plaintext', pattern: '**/*.kts' },
+                { scheme: 'file', language: 'plaintext', pattern: '**/*.java' },
+                { scheme: 'file', language: 'plaintext', pattern: '**/*.xml' },
                 { scheme: 'file', language: 'groovy', pattern: '**/build.gradle' },
             ],
             synchronize: {

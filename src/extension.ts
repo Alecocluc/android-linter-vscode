@@ -171,7 +171,9 @@ function initGradleLintFallback(context: vscode.ExtensionContext) {
         vscode.workspace.onDidOpenTextDocument(async (document) => {
             logger.file(`File opened: ${document.fileName} (language: ${document.languageId})`);
             const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && isAndroidFile(document)) {
+            const serverEnabled = config.get<boolean>(CONFIG_KEYS.SERVER_ENABLED, true);
+            const shouldLintOnOpen = config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && !serverEnabled;
+            if (shouldLintOnOpen && isAndroidFile(document)) {
                 logger.log(`   ▶️ Running lint on ${document.fileName}`);
                 await lintManager.lintFile(document);
             }
@@ -203,7 +205,8 @@ function initGradleLintFallback(context: vscode.ExtensionContext) {
 
     // Lint currently open files on activation
     const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN)) {
+    const serverEnabled = config.get<boolean>(CONFIG_KEYS.SERVER_ENABLED, true);
+    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && !serverEnabled) {
         vscode.workspace.textDocuments.forEach(async (document) => {
             if (isAndroidFile(document)) {
                 await lintManager.lintFile(document);
@@ -554,7 +557,11 @@ export function deactivate() {
 
 function isAndroidFile(document: vscode.TextDocument): boolean {
     const validLanguages = ['kotlin', 'java', 'xml'];
-    if (!validLanguages.includes(document.languageId)) {
+    const filePath = document.uri.fsPath.toLowerCase();
+    const validExtensions = ['.kt', '.kts', '.java', '.xml'];
+    const hasValidExtension = validExtensions.some(ext => filePath.endsWith(ext));
+
+    if (!validLanguages.includes(document.languageId) && !hasValidExtension) {
         return false;
     }
 
