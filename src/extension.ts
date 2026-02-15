@@ -13,6 +13,9 @@ import { DefinitionProvider } from './definitionProvider';
 import { ReferenceProvider } from './referenceProvider';
 import { HoverProvider } from './hoverProvider';
 import { AdbWirelessManager } from './adbWirelessManager';
+import { LanguageClientManager } from './client/languageClient';
+import { EmulatorManager } from './android/emulatorManager';
+import { VariantManager } from './build/variantManager';
 import { Logger } from './logger';
 import { CONFIG_NAMESPACE, CONFIG_KEYS, COMMANDS, VIEWS, SUPPORTED_LANGUAGES, DEFAULTS } from './constants';
 
@@ -24,6 +27,9 @@ let logcatManager: LogcatManager;
 let appLauncher: AndroidAppLauncher;
 let androidExplorerView: AndroidExplorerView;
 let adbWirelessManager: AdbWirelessManager;
+let languageClientManager: LanguageClientManager | undefined;
+let emulatorManager: EmulatorManager | undefined;
+let variantManager: VariantManager | undefined;
 let runStatusBarItem: vscode.StatusBarItem;
 let logger: Logger;
 
@@ -74,23 +80,171 @@ export function activate(context: vscode.ExtensionContext) {
         logger.warn(`Failed to refresh devices on startup: ${err}`);
     });
 
-    // Initialize lint manager
-    lintManager = new LintManager(diagnosticProvider, gradleProcessManager, outputChannel);
-    
-    // Log workspace info
+    // ── Language Server (ALS) ──────────────────────────────────────
+    const serverEnabled = extensionConfig.get<boolean>(CONFIG_KEYS.SERVER_ENABLED, true);
+    if (serverEnabled) {
+        try {
+            languageClientManager = new LanguageClientManager(context);
+            languageClientManager.start().then(() => {
+                logger.success('Android Language Server started');
+            }).catch(err => {
+                logger.warn(`Language server failed to start: ${err}. Falling back to Gradle lint.`);
+                initGradleLintFallback(context);
+            });
+        } catch (err) {
+            logger.warn(`Language server initialization failed: ${err}. Using Gradle lint fallback.`);
+            initGradleLintFallback(context);
+        }
+    } else {
+        logger.log('Language server disabled – using Gradle lint fallback');
+        initGradleLintFallback(context);
+    }
+
+    // ── Build Variant Manager ──────────────────────────────────────
     const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders) {
+        try {
+            variantManager = new VariantManager(context);
+            context.subscriptions.push(variantManager);
+        } catch (err) {
+            logger.warn(`Variant manager initialization failed: ${err}`);
+        }
+    }
+
+    // ── Emulator Manager ───────────────────────────────────────────
+    try {
+        emulatorManager = new EmulatorManager();
+    } catch (err) {
+        logger.warn(`Emulator manager initialization failed: ${err}`);
+    }
+
+    // Log workspace info
     if (workspaceFolders) {
         logger.folder(`Workspace folders: ${workspaceFolders.map(f => f.uri.fsPath).join(', ')}`);
     } else {
         logger.warn('No workspace folder found');
     }
 
-    // Register commands
+    // ── Register Commands ──────────────────────────────────────────
+    registerCoreCommands(context);
+    registerEmulatorCommands(context);
+    registerVariantCommands(context);
+    registerServerCommands(context);
+
+    // Optional status bar item
+    const showStatusBar = extensionConfig.get<boolean>(CONFIG_KEYS.SHOW_STATUS_BAR, false);
+    if (showStatusBar) {
+        runStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        runStatusBarItem.text = '$(debug-start) Run on Android';
+        runStatusBarItem.tooltip = 'Install Debug build and launch on a connected device';
+        runStatusBarItem.command = COMMANDS.LAUNCH_ON_DEVICE;
+        runStatusBarItem.show();
+        context.subscriptions.push(runStatusBarItem);
+    }
+
+    // ── Code Intelligence (fallback when LSP not active) ───────────
+    // When the language server is running, these are provided by the server.
+    // When fallback mode is active, we register the TypeScript-based providers.
+    if (!serverEnabled) {
+        registerFallbackProviders(context);
+    }
+
+    vscode.window.showInformationMessage('Android Linter is ready!');
+}
+
+// ── Helper: Gradle-based lint fallback ────────────────────────────
+function initGradleLintFallback(context: vscode.ExtensionContext) {
+    lintManager = new LintManager(diagnosticProvider, gradleProcessManager, logger.getOutputChannel());
+
+    // Listen to file open events
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument(async (document) => {
+            logger.file(`File opened: ${document.fileName} (language: ${document.languageId})`);
+            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && isAndroidFile(document)) {
+                logger.log(`   ▶️ Running lint on ${document.fileName}`);
+                await lintManager.lintFile(document);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument(async (document) => {
+            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_SAVE) && isAndroidFile(document)) {
+                await lintManager.lintFile(document);
+            }
+        })
+    );
+
+    let changeTimeout: NodeJS.Timeout | undefined;
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeTextDocument((event) => {
+            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_CHANGE) && isAndroidFile(event.document)) {
+                if (changeTimeout) { clearTimeout(changeTimeout); }
+                const delay = config.get<number>(CONFIG_KEYS.DEBOUNCE_DELAY) || DEFAULTS.DEBOUNCE_DELAY;
+                changeTimeout = setTimeout(async () => {
+                    await lintManager.lintFile(event.document);
+                }, delay);
+            }
+        })
+    );
+
+    // Lint currently open files on activation
+    const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN)) {
+        vscode.workspace.textDocuments.forEach(async (document) => {
+            if (isAndroidFile(document)) {
+                await lintManager.lintFile(document);
+            }
+        });
+    }
+}
+
+// ── Helper: register TypeScript-based code intelligence providers ──
+function registerFallbackProviders(context: vscode.ExtensionContext) {
+    const codeActionProvider = new CodeActionProvider();
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+            [...SUPPORTED_LANGUAGES],
+            codeActionProvider,
+            { providedCodeActionKinds: CodeActionProvider.providedCodeActionKinds }
+        )
+    );
+
+    const definitionProvider = new DefinitionProvider();
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider(['kotlin', 'java'], definitionProvider)
+    );
+
+    const referenceProvider = new ReferenceProvider();
+    context.subscriptions.push(
+        vscode.languages.registerReferenceProvider(['kotlin', 'java'], referenceProvider)
+    );
+
+    const enableHover = vscode.workspace.getConfiguration(CONFIG_NAMESPACE)
+        .get<boolean>(CONFIG_KEYS.ENABLE_HOVER_REFERENCES, false);
+    if (enableHover) {
+        const hoverProvider = new HoverProvider();
+        context.subscriptions.push(
+            vscode.languages.registerHoverProvider(['kotlin', 'java'], hoverProvider)
+        );
+    }
+    logger.success('Registered fallback code intelligence providers');
+}
+
+// ── Helper: core commands ──────────────────────────────────────────
+function registerCoreCommands(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand(COMMANDS.LINT_CURRENT_FILE, async () => {
             const editor = vscode.window.activeTextEditor;
             if (editor) {
-                await lintManager.lintFile(editor.document);
+                if (lintManager) {
+                    await lintManager.lintFile(editor.document);
+                } else {
+                    vscode.window.showInformationMessage('Lint is handled by the Language Server');
+                }
             } else {
                 vscode.window.showWarningMessage('No active file to lint');
             }
@@ -99,7 +253,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(COMMANDS.LINT_PROJECT, async () => {
-            await lintManager.lintProject();
+            if (lintManager) {
+                await lintManager.lintProject();
+            } else {
+                vscode.window.showInformationMessage('Project lint is handled by the Language Server');
+            }
         })
     );
 
@@ -158,7 +316,6 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Register Android Explorer commands
     context.subscriptions.push(
         vscode.commands.registerCommand(COMMANDS.REFRESH_DEVICES, async () => {
             await androidExplorerView.refreshDevices();
@@ -183,7 +340,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand(COMMANDS.ADB_CONNECT, async () => {
             await adbWirelessManager.connect();
-            // Refresh devices after connection attempt
             setTimeout(() => androidExplorerView.refreshDevices(), 2000);
         })
     );
@@ -194,18 +350,17 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Extract String Resource command (for code actions)
+    // Extract String Resource
     context.subscriptions.push(
         vscode.commands.registerCommand(COMMANDS.EXTRACT_STRING, async (uri: vscode.Uri, range: vscode.Range) => {
             const document = await vscode.workspace.openTextDocument(uri);
             const text = document.getText(range);
             
-            // Prompt for resource name
             const resourceName = await vscode.window.showInputBox({
                 prompt: 'Enter the string resource name',
                 placeHolder: 'my_string_name',
                 validateInput: (value) => {
-                    if (!value) return 'Resource name is required';
+                    if (!value) { return 'Resource name is required'; }
                     if (!/^[a-z][a-z0-9_]*$/.test(value)) {
                         return 'Resource name must start with lowercase letter and contain only lowercase letters, numbers, and underscores';
                     }
@@ -213,9 +368,8 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             });
 
-            if (!resourceName) return;
+            if (!resourceName) { return; }
 
-            // Find strings.xml
             const workspaceRoot = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
             if (!workspaceRoot) {
                 vscode.window.showErrorMessage('No workspace folder found');
@@ -229,10 +383,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             let stringsXmlPath: string | undefined;
             for (const p of stringsXmlPaths) {
-                if (fs.existsSync(p)) {
-                    stringsXmlPath = p;
-                    break;
-                }
+                if (fs.existsSync(p)) { stringsXmlPath = p; break; }
             }
 
             if (!stringsXmlPath) {
@@ -240,144 +391,135 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // Read and update strings.xml
             try {
                 let stringsContent = fs.readFileSync(stringsXmlPath, 'utf8');
-                
-                // Clean the text value
                 const cleanText = text.replace(/^["']|["']$/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                
-                // Add the new string before </resources>
                 const newString = `    <string name="${resourceName}">${cleanText}</string>\n`;
                 stringsContent = stringsContent.replace('</resources>', `${newString}</resources>`);
-                
                 fs.writeFileSync(stringsXmlPath, stringsContent, 'utf8');
-                
-                // Replace the original text with the resource reference
+
                 const edit = new vscode.WorkspaceEdit();
                 const isXml = document.languageId === 'xml';
                 const replacement = isXml ? `@string/${resourceName}` : `R.string.${resourceName}`;
                 edit.replace(uri, range, replacement);
                 await vscode.workspace.applyEdit(edit);
-                
+
                 vscode.window.showInformationMessage(`String extracted to @string/${resourceName}`);
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to extract string: ${error}`);
             }
         })
     );
+}
 
-    // Optional status bar item (now we have the Android Explorer panel)
-    const showStatusBar = vscode.workspace.getConfiguration(CONFIG_NAMESPACE).get<boolean>(CONFIG_KEYS.SHOW_STATUS_BAR, false);
-    if (showStatusBar) {
-        runStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-        runStatusBarItem.text = '$(debug-start) Run on Android';
-        runStatusBarItem.tooltip = 'Install Debug build and launch on a connected device';
-        runStatusBarItem.command = COMMANDS.LAUNCH_ON_DEVICE;
-        runStatusBarItem.show();
-        context.subscriptions.push(runStatusBarItem);
-    }
-
-    // Register code action provider for quick fixes
-    const codeActionProvider = new CodeActionProvider();
+// ── Emulator commands ──────────────────────────────────────────────
+function registerEmulatorCommands(context: vscode.ExtensionContext) {
     context.subscriptions.push(
-        vscode.languages.registerCodeActionsProvider(
-            [...SUPPORTED_LANGUAGES],
-            codeActionProvider,
-            {
-                providedCodeActionKinds: CodeActionProvider.providedCodeActionKinds
-            }
-        )
-    );
-
-    // Register definition provider for "Go to Definition" (Ctrl+Click)
-    const definitionProvider = new DefinitionProvider();
-    context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider(
-            ['kotlin', 'java'],
-            definitionProvider
-        )
-    );
-
-    // Register reference provider for "Find All References"
-    const referenceProvider = new ReferenceProvider();
-    context.subscriptions.push(
-        vscode.languages.registerReferenceProvider(
-            ['kotlin', 'java'],
-            referenceProvider
-        )
-    );
-
-    // Register hover provider to show references in tooltip (optional, disabled by default)
-    const enableHover = vscode.workspace.getConfiguration(CONFIG_NAMESPACE).get<boolean>(CONFIG_KEYS.ENABLE_HOVER_REFERENCES, false);
-    if (enableHover) {
-        const hoverProvider = new HoverProvider();
-        context.subscriptions.push(
-            vscode.languages.registerHoverProvider(
-                ['kotlin', 'java'],
-                hoverProvider
-            )
-        );
-        logger.success('Registered code navigation providers (Go to Definition, Find References, Hover)');
-    } else {
-        logger.success('Registered code navigation providers (Go to Definition, Find References)');
-        logger.log('💡 Tip: Enable "android-linter.enableHoverReferences" to show references on hover');
-    }
-
-    // Listen to file open events
-    context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(async (document) => {
-            logger.file(`File opened: ${document.fileName} (language: ${document.languageId})`);
-            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && isAndroidFile(document)) {
-                logger.log(`   ▶️ Running lint on ${document.fileName}`);
-                await lintManager.lintFile(document);
+        vscode.commands.registerCommand(COMMANDS.CREATE_EMULATOR, async () => {
+            if (emulatorManager) {
+                await emulatorManager.createAvdWizard();
+            } else {
+                vscode.window.showErrorMessage('Emulator manager not available');
             }
         })
     );
 
-    // Listen to file save events
     context.subscriptions.push(
-        vscode.workspace.onDidSaveTextDocument(async (document) => {
-            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_SAVE) && isAndroidFile(document)) {
-                await lintManager.lintFile(document);
+        vscode.commands.registerCommand(COMMANDS.START_EMULATOR, async () => {
+            if (!emulatorManager) {
+                vscode.window.showErrorMessage('Emulator manager not available');
+                return;
+            }
+            const avds = await emulatorManager.listAvds();
+            if (avds.length === 0) {
+                vscode.window.showWarningMessage('No AVDs found. Create one first.');
+                return;
+            }
+            const pick = await vscode.window.showQuickPick(
+                avds.map(a => ({ label: a.name, description: a.isRunning ? '(running)' : '' })),
+                { placeHolder: 'Select AVD to start' }
+            );
+            if (pick) {
+                await emulatorManager.startEmulator(pick.label);
+                setTimeout(() => androidExplorerView.refreshDevices(), 5000);
             }
         })
     );
 
-    // Listen to file change events (with debouncing)
-    let changeTimeout: NodeJS.Timeout | undefined;
     context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument((event) => {
-            const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-            if (config.get<boolean>(CONFIG_KEYS.LINT_ON_CHANGE) && isAndroidFile(event.document)) {
-                if (changeTimeout) {
-                    clearTimeout(changeTimeout);
-                }
-                const delay = config.get<number>(CONFIG_KEYS.DEBOUNCE_DELAY) || DEFAULTS.DEBOUNCE_DELAY;
-                changeTimeout = setTimeout(async () => {
-                    await lintManager.lintFile(event.document);
-                }, delay);
+        vscode.commands.registerCommand(COMMANDS.STOP_EMULATOR, async () => {
+            if (!emulatorManager) {
+                vscode.window.showErrorMessage('Emulator manager not available');
+                return;
+            }
+            // List running emulators via ADB
+            const serial = await vscode.window.showInputBox({
+                prompt: 'Enter emulator serial (e.g. emulator-5554)',
+                placeHolder: 'emulator-5554'
+            });
+            if (serial) {
+                await emulatorManager.stopEmulator(serial);
+                setTimeout(() => androidExplorerView.refreshDevices(), 2000);
             }
         })
     );
 
-    // Lint currently open files on activation
-    const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN)) {
-        vscode.workspace.textDocuments.forEach(async (document) => {
-            if (isAndroidFile(document)) {
-                await lintManager.lintFile(document);
+    context.subscriptions.push(
+        vscode.commands.registerCommand(COMMANDS.DELETE_EMULATOR, async () => {
+            if (!emulatorManager) {
+                vscode.window.showErrorMessage('Emulator manager not available');
+                return;
             }
-        });
-    }
+            const avds = await emulatorManager.listAvds();
+            if (avds.length === 0) {
+                vscode.window.showWarningMessage('No AVDs to delete.');
+                return;
+            }
+            const pick = await vscode.window.showQuickPick(
+                avds.map(a => ({ label: a.name, description: a.isRunning ? '(running)' : '' })),
+                { placeHolder: 'Select AVD to delete' }
+            );
+            if (pick) {
+                await emulatorManager.deleteAvd(pick.label);
+            }
+        })
+    );
+}
 
-    vscode.window.showInformationMessage('Android Linter is ready!');
+// ── Variant commands ───────────────────────────────────────────────
+function registerVariantCommands(context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+        vscode.commands.registerCommand(COMMANDS.SELECT_VARIANT, async () => {
+            if (variantManager) {
+                await variantManager.selectVariant();
+            } else {
+                vscode.window.showWarningMessage('Variant manager not available');
+            }
+        })
+    );
+}
+
+// ── Language Server commands ───────────────────────────────────────
+function registerServerCommands(context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+        vscode.commands.registerCommand(COMMANDS.RESTART_SERVER, async () => {
+            if (languageClientManager) {
+                await languageClientManager.restart();
+                vscode.window.showInformationMessage('Android Language Server restarted');
+            } else {
+                vscode.window.showWarningMessage('Language server is not enabled');
+            }
+        })
+    );
 }
 
 
 export function deactivate() {
+    const promises: Thenable<void>[] = [];
+    
+    if (languageClientManager) {
+        promises.push(languageClientManager.stop());
+    }
     if (lintManager) {
         lintManager.dispose();
     }
@@ -390,9 +532,14 @@ export function deactivate() {
     if (gradleProcessManager) {
         gradleProcessManager.dispose();
     }
+    if (variantManager) {
+        variantManager.dispose();
+    }
     if (runStatusBarItem) {
         runStatusBarItem.dispose();
     }
+    
+    return Promise.all(promises);
 }
 
 function isAndroidFile(document: vscode.TextDocument): boolean {
@@ -413,7 +560,6 @@ function isAndroidFile(document: vscode.TextDocument): boolean {
         return true;
     }
     
-    // Check app level build.gradle
     const appLevelGradle = fs.existsSync(path.join(workspaceRoot, 'app', 'build.gradle')) || fs.existsSync(path.join(workspaceRoot, 'app', 'build.gradle.kts'));
 
     return appLevelGradle;

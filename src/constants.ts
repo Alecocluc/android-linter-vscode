@@ -1,5 +1,10 @@
 /**
- * Shared constants for the Android Linter extension
+ * Shared constants for the Android Linter extension.
+ * 
+ * This extension aims for 1:1 parity with Android Studio by embedding
+ * the same lint engine (com.android.tools.lint:lint-checks) in a
+ * Kotlin/JVM language server, plus providing build, deploy, debug,
+ * profiling, and emulator management features.
  */
 
 // Extension configuration namespace
@@ -7,7 +12,7 @@ export const CONFIG_NAMESPACE = 'android-linter';
 
 // Configuration keys
 export const CONFIG_KEYS = {
-    // Lint settings
+    // Lint settings (legacy Gradle-based — kept for fallback)
     LINT_ON_OPEN: 'lintOnOpen',
     LINT_ON_SAVE: 'lintOnSave',
     LINT_ON_CHANGE: 'lintOnChange',
@@ -31,6 +36,13 @@ export const CONFIG_KEYS = {
     // Paths
     GRADLE_PATH: 'gradlePath',
     ADB_PATH: 'adbPath',
+    JAVA_PATH: 'javaPath',
+    SDK_PATH: 'sdkPath',
+    
+    // Language Server settings
+    SERVER_ENABLED: 'serverEnabled',
+    SERVER_JVM_ARGS: 'serverJvmArgs',
+    SERVER_AUTO_RESTART: 'serverAutoRestart',
     
     // Launch settings
     LAUNCH_MODULE: 'launchModule',
@@ -55,30 +67,66 @@ export const CONFIG_KEYS = {
     GRADLE_DAEMON_IDLE_TIMEOUT_MS: 'gradleDaemonIdleTimeoutMs',
     GRADLE_JVM_ARGS: 'gradleJvmArgs',
     GRADLE_MAX_WORKERS: 'gradleMaxWorkers',
+    
+    // Emulator settings
+    EMULATOR_GPU_MODE: 'emulatorGpuMode',
+    
+    // Profiling settings
+    PROFILER_POLL_INTERVAL_MS: 'profilerPollIntervalMs',
 } as const;
 
 // Command IDs
 export const COMMANDS = {
+    // Linting
     LINT_CURRENT_FILE: 'android-linter.lintCurrentFile',
     LINT_PROJECT: 'android-linter.lintProject',
     CLEAR_DIAGNOSTICS: 'android-linter.clearDiagnostics',
+    
+    // Build & Deploy
     LAUNCH_ON_DEVICE: 'android-linter.launchOnDevice',
     RELAUNCH_APP: 'android-linter.relaunchApp',
     DEBUG_APP: 'android-linter.debugApp',
     STOP_APP: 'android-linter.stopApp',
+    
+    // Logcat
     SHOW_LOGCAT: 'android-linter.showLogcat',
     STOP_LOGCAT: 'android-linter.stopLogcat',
     CLEAR_LOGCAT: 'android-linter.clearLogcat',
+    
+    // Devices & Emulators
     REFRESH_DEVICES: 'android-linter.refreshDevices',
     SELECT_DEVICE: 'android-linter.selectDevice',
     ADB_CONNECT: 'android-linter.adbConnect',
     ADB_PAIR: 'android-linter.adbPair',
+    CREATE_EMULATOR: 'android-linter.createEmulator',
+    START_EMULATOR: 'android-linter.startEmulator',
+    STOP_EMULATOR: 'android-linter.stopEmulator',
+    DELETE_EMULATOR: 'android-linter.deleteEmulator',
+    
+    // Resources
     EXTRACT_STRING: 'android-linter.extractString',
+    
+    // Build Variants
+    SELECT_VARIANT: 'android-linter.selectVariant',
+    SYNC_PROJECT: 'android-linter.syncProject',
+    
+    // Language Server
+    RESTART_SERVER: 'android-linter.restartServer',
+    
+    // Profiling & Tools
+    OPEN_PROFILER: 'android-linter.openProfiler',
+    OPEN_DATABASE_INSPECTOR: 'android-linter.openDatabaseInspector',
+    OPEN_LAYOUT_INSPECTOR: 'android-linter.openLayoutInspector',
+    ANALYZE_APK: 'android-linter.analyzeApk',
+    SCREEN_CAPTURE: 'android-linter.screenCapture',
+    SCREEN_RECORD: 'android-linter.screenRecord',
 } as const;
 
 // View IDs
 export const VIEWS = {
     ANDROID_EXPLORER: 'androidExplorer',
+    RESOURCE_BROWSER: 'androidResources',
+    GRADLE_TASKS: 'androidGradleTasks',
 } as const;
 
 // Output channel names

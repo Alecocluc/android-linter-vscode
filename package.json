@@ -1,8 +1,8 @@
 {
   "name": "android-linter",
   "displayName": "Android Linter",
-  "description": "Android linting and error detection for Kotlin/Java projects using Gradle",
-  "version": "0.1.1",
+  "description": "Full Android development experience in VS Code — real-time lint, code intelligence, build variants, emulator management, logcat, and more",
+  "version": "0.2.0",
   "publisher": "Alecocluc",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,10 @@
   },
   "categories": [
     "Linters",
-    "Programming Languages"
+    "Programming Languages",
+    "Debuggers",
+    "Formatters",
+    "Snippets"
   ],
   "activationEvents": [
     "workspaceContains:**/build.gradle",
@@ -97,6 +100,71 @@
       {
         "command": "android-linter.extractString",
         "title": "Android: Extract String Resource"
+      },
+      {
+        "command": "android-linter.relaunchApp",
+        "title": "Android: Re-launch App"
+      },
+      {
+        "command": "android-linter.debugApp",
+        "title": "Android: Debug App"
+      },
+      {
+        "command": "android-linter.stopApp",
+        "title": "Android: Stop App"
+      },
+      {
+        "command": "android-linter.createEmulator",
+        "title": "Android: Create Emulator (AVD)"
+      },
+      {
+        "command": "android-linter.startEmulator",
+        "title": "Android: Start Emulator"
+      },
+      {
+        "command": "android-linter.stopEmulator",
+        "title": "Android: Stop Emulator"
+      },
+      {
+        "command": "android-linter.deleteEmulator",
+        "title": "Android: Delete Emulator (AVD)"
+      },
+      {
+        "command": "android-linter.selectVariant",
+        "title": "Android: Select Build Variant",
+        "icon": "$(symbol-enum)"
+      },
+      {
+        "command": "android-linter.syncProject",
+        "title": "Android: Sync Project with Gradle"
+      },
+      {
+        "command": "android-linter.restartServer",
+        "title": "Android: Restart Language Server"
+      },
+      {
+        "command": "android-linter.openProfiler",
+        "title": "Android: Open Profiler"
+      },
+      {
+        "command": "android-linter.openDatabaseInspector",
+        "title": "Android: Open Database Inspector"
+      },
+      {
+        "command": "android-linter.openLayoutInspector",
+        "title": "Android: Open Layout Inspector"
+      },
+      {
+        "command": "android-linter.analyzeApk",
+        "title": "Android: Analyze APK"
+      },
+      {
+        "command": "android-linter.screenCapture",
+        "title": "Android: Screen Capture"
+      },
+      {
+        "command": "android-linter.screenRecord",
+        "title": "Android: Screen Record"
       }
     ],
     "menus": {
@@ -108,6 +176,16 @@
         }
       ]
     },
+    "snippets": [
+      {
+        "language": "kotlin",
+        "path": "./snippets/kotlin-android.json"
+      },
+      {
+        "language": "xml",
+        "path": "./snippets/xml-android.json"
+      }
+    ],
     "configuration": {
       "title": "Android Linter",
       "properties": {
@@ -323,6 +401,48 @@
           "type": "boolean",
           "default": false,
           "description": "Show 'Run on Android' button in status bar (now available in Android Explorer panel)"
+        },
+        "android-linter.javaPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Java executable (used by Language Server). Leave empty to auto-detect from JAVA_HOME or PATH."
+        },
+        "android-linter.sdkPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Android SDK. Leave empty to auto-detect from ANDROID_HOME or ANDROID_SDK_ROOT."
+        },
+        "android-linter.serverEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Android Language Server for real-time lint, completions, and code intelligence. Disable to use legacy Gradle-based lint."
+        },
+        "android-linter.serverJvmArgs": {
+          "type": "string",
+          "default": "-Xmx2g",
+          "description": "Extra JVM arguments for the Language Server (e.g. '-Xmx4g -XX:+UseZGC')."
+        },
+        "android-linter.serverAutoRestart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically restart the Language Server if it crashes."
+        },
+        "android-linter.emulatorGpuMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "host",
+            "swiftshader_indirect",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Let the emulator choose the best GPU mode",
+            "Use host GPU (fastest, requires GPU support)",
+            "Use SwiftShader software renderer",
+            "Disable GPU acceleration"
+          ],
+          "description": "GPU acceleration mode for Android emulators"
         }
       }
     }
@@ -335,6 +455,7 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && node esbuild.js --production",
+    "build-server": "cd server && gradlew shadowJar",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
@@ -351,6 +472,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "sax": "^1.4.3"
+    "sax": "^1.4.3",
+    "vscode-languageclient": "^9.0.1"
   }
 }

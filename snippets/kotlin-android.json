@@ -1,0 +1,197 @@
+{
+    "Log.d": {
+        "prefix": "logd",
+        "body": "Log.d(TAG, \"${1:message}\")",
+        "description": "Log.d debug message"
+    },
+    "Log.e": {
+        "prefix": "loge",
+        "body": "Log.e(TAG, \"${1:message}\", ${2:throwable})",
+        "description": "Log.e error message"
+    },
+    "Log.i": {
+        "prefix": "logi",
+        "body": "Log.i(TAG, \"${1:message}\")",
+        "description": "Log.i info message"
+    },
+    "Log.w": {
+        "prefix": "logw",
+        "body": "Log.w(TAG, \"${1:message}\")",
+        "description": "Log.w warning message"
+    },
+    "Log.v": {
+        "prefix": "logv",
+        "body": "Log.v(TAG, \"${1:message}\")",
+        "description": "Log.v verbose message"
+    },
+    "TAG companion": {
+        "prefix": "tag",
+        "body": "companion object {\n    private const val TAG = \"${1:${TM_FILENAME_BASE}}\"\n}",
+        "description": "TAG constant in companion object"
+    },
+    "Toast": {
+        "prefix": "toast",
+        "body": "Toast.makeText(${1:context}, \"${2:message}\", Toast.LENGTH_${3|SHORT,LONG|}).show()",
+        "description": "Show a Toast message"
+    },
+    "Toast variable": {
+        "prefix": "toastv",
+        "body": "Toast.makeText(${1:context}, ${2:message}, Toast.LENGTH_${3|SHORT,LONG|}).show()",
+        "description": "Show a Toast message with variable"
+    },
+    "Intent": {
+        "prefix": "intent",
+        "body": "val ${1:intent} = Intent(${2:this}, ${3:TargetActivity}::class.java)\nstartActivity($1)",
+        "description": "Create and start an Intent"
+    },
+    "Intent with extras": {
+        "prefix": "intentx",
+        "body": "val ${1:intent} = Intent(${2:this}, ${3:TargetActivity}::class.java).apply {\n    putExtra(\"${4:key}\", ${5:value})\n}\nstartActivity($1)",
+        "description": "Create Intent with extras"
+    },
+    "ViewModel": {
+        "prefix": "viewmodel",
+        "body": "class ${1:${TM_FILENAME_BASE}} : ViewModel() {\n\n    private val _${2:uiState} = MutableStateFlow(${3:UiState}())\n    val $2: StateFlow<$3> = _$2.asStateFlow()\n\n    $0\n}",
+        "description": "ViewModel class"
+    },
+    "LiveData": {
+        "prefix": "livedata",
+        "body": "private val _${1:data} = MutableLiveData<${2:String}>()\nval $1: LiveData<$2> = _$1",
+        "description": "LiveData with backing field"
+    },
+    "StateFlow": {
+        "prefix": "stateflow",
+        "body": "private val _${1:state} = MutableStateFlow(${2:initialValue})\nval $1: StateFlow<${3:Type}> = _$1.asStateFlow()",
+        "description": "StateFlow with backing field"
+    },
+    "Coroutine launch": {
+        "prefix": "launch",
+        "body": "viewModelScope.launch {\n    $0\n}",
+        "description": "Launch coroutine in ViewModel scope"
+    },
+    "Coroutine lifecycleScope": {
+        "prefix": "lifecyclescope",
+        "body": "lifecycleScope.launch {\n    $0\n}",
+        "description": "Launch coroutine in lifecycle scope"
+    },
+    "Coroutine withContext": {
+        "prefix": "withcontext",
+        "body": "withContext(Dispatchers.${1|IO,Main,Default|}) {\n    $0\n}",
+        "description": "Switch coroutine dispatcher"
+    },
+    "RecyclerView Adapter": {
+        "prefix": "rvadapter",
+        "body": "class ${1:MyAdapter}(private val items: List<${2:Item}>) : RecyclerView.Adapter<$1.ViewHolder>() {\n\n    class ViewHolder(val binding: ${3:ItemBinding}) : RecyclerView.ViewHolder(binding.root)\n\n    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {\n        val binding = $3.inflate(LayoutInflater.from(parent.context), parent, false)\n        return ViewHolder(binding)\n    }\n\n    override fun onBindViewHolder(holder: ViewHolder, position: Int) {\n        val item = items[position]\n        $0\n    }\n\n    override fun getItemCount() = items.size\n}",
+        "description": "RecyclerView Adapter with ViewBinding"
+    },
+    "ListAdapter DiffUtil": {
+        "prefix": "listadapter",
+        "body": "class ${1:MyAdapter} : ListAdapter<${2:Item}, $1.ViewHolder>(DiffCallback()) {\n\n    class ViewHolder(val binding: ${3:ItemBinding}) : RecyclerView.ViewHolder(binding.root)\n\n    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {\n        val binding = $3.inflate(LayoutInflater.from(parent.context), parent, false)\n        return ViewHolder(binding)\n    }\n\n    override fun onBindViewHolder(holder: ViewHolder, position: Int) {\n        val item = getItem(position)\n        $0\n    }\n\n    class DiffCallback : DiffUtil.ItemCallback<$2>() {\n        override fun areItemsTheSame(oldItem: $2, newItem: $2) = oldItem.id == newItem.id\n        override fun areContentsTheSame(oldItem: $2, newItem: $2) = oldItem == newItem\n    }\n}",
+        "description": "ListAdapter with DiffUtil"
+    },
+    "Fragment": {
+        "prefix": "fragment",
+        "body": "class ${1:${TM_FILENAME_BASE}} : Fragment() {\n\n    private var _binding: ${2:FragmentBinding}? = null\n    private val binding get() = _binding!!\n\n    override fun onCreateView(\n        inflater: LayoutInflater,\n        container: ViewGroup?,\n        savedInstanceState: Bundle?\n    ): View {\n        _binding = $2.inflate(inflater, container, false)\n        return binding.root\n    }\n\n    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {\n        super.onViewCreated(view, savedInstanceState)\n        $0\n    }\n\n    override fun onDestroyView() {\n        super.onDestroyView()\n        _binding = null\n    }\n}",
+        "description": "Fragment with ViewBinding"
+    },
+    "Activity": {
+        "prefix": "activity",
+        "body": "class ${1:${TM_FILENAME_BASE}} : AppCompatActivity() {\n\n    private lateinit var binding: ${2:ActivityBinding}\n\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        binding = $2.inflate(layoutInflater)\n        setContentView(binding.root)\n        $0\n    }\n}",
+        "description": "Activity with ViewBinding"
+    },
+    "try-catch": {
+        "prefix": "tryc",
+        "body": "try {\n    $1\n} catch (e: ${2:Exception}) {\n    Log.e(TAG, \"${3:Error}\", e)\n    $0\n}",
+        "description": "Try-catch with logging"
+    },
+    "suspend fun": {
+        "prefix": "suspfun",
+        "body": "suspend fun ${1:functionName}(${2:}): ${3:Unit} {\n    $0\n}",
+        "description": "Suspend function"
+    },
+    "data class": {
+        "prefix": "dataclass",
+        "body": "data class ${1:${TM_FILENAME_BASE}}(\n    val ${2:field}: ${3:String},\n    $0\n)",
+        "description": "Data class"
+    },
+    "sealed class": {
+        "prefix": "sealed",
+        "body": "sealed class ${1:${TM_FILENAME_BASE}} {\n    data class ${2:Success}(val ${3:data}: ${4:Any}) : $1()\n    data class ${5:Error}(val ${6:message}: String) : $1()\n    data object ${7:Loading} : $1()\n}",
+        "description": "Sealed class for UI state"
+    },
+    "enum class": {
+        "prefix": "enumclass",
+        "body": "enum class ${1:${TM_FILENAME_BASE}} {\n    ${2:VALUE1},\n    ${3:VALUE2},\n    $0\n}",
+        "description": "Enum class"
+    },
+    "object singleton": {
+        "prefix": "singleton",
+        "body": "object ${1:${TM_FILENAME_BASE}} {\n    $0\n}",
+        "description": "Object singleton"
+    },
+    "Room Entity": {
+        "prefix": "roomentity",
+        "body": "@Entity(tableName = \"${1:table_name}\")\ndata class ${2:${TM_FILENAME_BASE}}(\n    @PrimaryKey(autoGenerate = true)\n    val id: Long = 0,\n    @ColumnInfo(name = \"${3:column_name}\")\n    val ${4:field}: ${5:String},\n    $0\n)",
+        "description": "Room Entity data class"
+    },
+    "Room DAO": {
+        "prefix": "roomdao",
+        "body": "@Dao\ninterface ${1:${TM_FILENAME_BASE}} {\n\n    @Query(\"SELECT * FROM ${2:table_name}\")\n    fun getAll(): Flow<List<${3:Entity}>>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun insert(item: $3)\n\n    @Delete\n    suspend fun delete(item: $3)\n    $0\n}",
+        "description": "Room DAO interface"
+    },
+    "Hilt ViewModel": {
+        "prefix": "hiltvm",
+        "body": "@HiltViewModel\nclass ${1:${TM_FILENAME_BASE}} @Inject constructor(\n    private val ${2:repository}: ${3:Repository}\n) : ViewModel() {\n\n    private val _${4:uiState} = MutableStateFlow(${5:UiState}())\n    val $4: StateFlow<$5> = _$4.asStateFlow()\n\n    $0\n}",
+        "description": "Hilt ViewModel"
+    },
+    "Compose Scaffold": {
+        "prefix": "scaffold",
+        "body": "Scaffold(\n    topBar = {\n        TopAppBar(\n            title = { Text(\"${1:Title}\") }\n        )\n    },\n    floatingActionButton = {\n        FloatingActionButton(onClick = { $2 }) {\n            Icon(Icons.Default.Add, contentDescription = \"${3:Add}\")\n        }\n    }\n) { paddingValues ->\n    $0\n}",
+        "description": "Material3 Scaffold"
+    },
+    "Composable function": {
+        "prefix": "comp",
+        "body": "@Composable\nfun ${1:${TM_FILENAME_BASE}}(\n    modifier: Modifier = Modifier,\n    $2\n) {\n    $0\n}",
+        "description": "Composable function"
+    },
+    "Composable Preview": {
+        "prefix": "preview",
+        "body": "@Preview(showBackground = true)\n@Composable\nfun ${1:${TM_FILENAME_BASE}}Preview() {\n    ${2:MaterialTheme} {\n        ${3:${TM_FILENAME_BASE}}()\n    }\n}",
+        "description": "Composable Preview"
+    },
+    "remember mutableStateOf": {
+        "prefix": "remstate",
+        "body": "var ${1:state} by remember { mutableStateOf(${2:initialValue}) }",
+        "description": "remember { mutableStateOf() }"
+    },
+    "collectAsState": {
+        "prefix": "collectstate",
+        "body": "val ${1:state} by ${2:viewModel}.${3:uiState}.collectAsStateWithLifecycle()",
+        "description": "Collect StateFlow as Compose state"
+    },
+    "LaunchedEffect": {
+        "prefix": "launchedeffect",
+        "body": "LaunchedEffect(${1:key}) {\n    $0\n}",
+        "description": "LaunchedEffect"
+    },
+    "NavigationHost": {
+        "prefix": "navhost",
+        "body": "NavHost(\n    navController = ${1:navController},\n    startDestination = \"${2:home}\"\n) {\n    composable(\"$2\") {\n        $0\n    }\n}",
+        "description": "Navigation host"
+    },
+    "Retrofit interface": {
+        "prefix": "retrofit",
+        "body": "interface ${1:ApiService} {\n\n    @GET(\"${2:endpoint}\")\n    suspend fun ${3:getData}(): Response<${4:ResponseType}>\n\n    $0\n}",
+        "description": "Retrofit API interface"
+    },
+    "Flow": {
+        "prefix": "flow",
+        "body": "flow {\n    $0\n    emit(${1:value})\n}",
+        "description": "Kotlin Flow builder"
+    },
+    "SharedFlow": {
+        "prefix": "sharedflow",
+        "body": "private val _${1:event} = MutableSharedFlow<${2:Event}>()\nval $1: SharedFlow<$2> = _$1.asSharedFlow()",
+        "description": "SharedFlow with backing field"
+    }
+}

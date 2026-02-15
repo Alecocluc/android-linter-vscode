@@ -1,0 +1,122 @@
+{
+    "LinearLayout": {
+        "prefix": "linearlayout",
+        "body": "<LinearLayout\n    xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"${1|match_parent,wrap_content|}\"\n    android:orientation=\"${2|vertical,horizontal|}\">\n\n    $0\n\n</LinearLayout>",
+        "description": "LinearLayout root element"
+    },
+    "ConstraintLayout": {
+        "prefix": "constraintlayout",
+        "body": "<androidx.constraintlayout.widget.ConstraintLayout\n    xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    xmlns:app=\"http://schemas.android.com/apk/res-auto\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n    $0\n\n</androidx.constraintlayout.widget.ConstraintLayout>",
+        "description": "ConstraintLayout root element"
+    },
+    "FrameLayout": {
+        "prefix": "framelayout",
+        "body": "<FrameLayout\n    android:layout_width=\"${1|match_parent,wrap_content|}\"\n    android:layout_height=\"${2|match_parent,wrap_content|}\">\n\n    $0\n\n</FrameLayout>",
+        "description": "FrameLayout"
+    },
+    "TextView": {
+        "prefix": "textview",
+        "body": "<TextView\n    android:id=\"@+id/${1:textView}\"\n    android:layout_width=\"${2|wrap_content,match_parent|}\"\n    android:layout_height=\"wrap_content\"\n    android:text=\"${3:text}\"\n    $0/>",
+        "description": "TextView element"
+    },
+    "EditText": {
+        "prefix": "edittext",
+        "body": "<EditText\n    android:id=\"@+id/${1:editText}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\"\n    android:hint=\"${2:hint}\"\n    android:inputType=\"${3|text,textPassword,number,phone,textEmailAddress,textMultiLine|}\"\n    $0/>",
+        "description": "EditText element"
+    },
+    "Button": {
+        "prefix": "button",
+        "body": "<Button\n    android:id=\"@+id/${1:button}\"\n    android:layout_width=\"${2|wrap_content,match_parent|}\"\n    android:layout_height=\"wrap_content\"\n    android:text=\"${3:Button}\"\n    $0/>",
+        "description": "Button element"
+    },
+    "MaterialButton": {
+        "prefix": "materialbutton",
+        "body": "<com.google.android.material.button.MaterialButton\n    android:id=\"@+id/${1:button}\"\n    android:layout_width=\"${2|wrap_content,match_parent|}\"\n    android:layout_height=\"wrap_content\"\n    android:text=\"${3:Button}\"\n    app:cornerRadius=\"${4:8dp}\"\n    $0/>",
+        "description": "MaterialButton element"
+    },
+    "ImageView": {
+        "prefix": "imageview",
+        "body": "<ImageView\n    android:id=\"@+id/${1:imageView}\"\n    android:layout_width=\"${2|wrap_content,match_parent|}\"\n    android:layout_height=\"${3|wrap_content,match_parent|}\"\n    android:src=\"@drawable/${4:image}\"\n    android:contentDescription=\"${5:description}\"\n    $0/>",
+        "description": "ImageView element"
+    },
+    "RecyclerView": {
+        "prefix": "recyclerview",
+        "body": "<androidx.recyclerview.widget.RecyclerView\n    android:id=\"@+id/${1:recyclerView}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\"\n    app:layoutManager=\"${2|LinearLayoutManager,GridLayoutManager|}\"\n    $0/>",
+        "description": "RecyclerView element"
+    },
+    "CardView": {
+        "prefix": "cardview",
+        "body": "<com.google.android.material.card.MaterialCardView\n    android:id=\"@+id/${1:card}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\"\n    app:cardCornerRadius=\"${2:12dp}\"\n    app:cardElevation=\"${3:4dp}\"\n    android:layout_margin=\"${4:8dp}\">\n\n    $0\n\n</com.google.android.material.card.MaterialCardView>",
+        "description": "MaterialCardView element"
+    },
+    "FloatingActionButton": {
+        "prefix": "fab",
+        "body": "<com.google.android.material.floatingactionbutton.FloatingActionButton\n    android:id=\"@+id/${1:fab}\"\n    android:layout_width=\"wrap_content\"\n    android:layout_height=\"wrap_content\"\n    android:layout_gravity=\"bottom|end\"\n    android:layout_margin=\"16dp\"\n    app:srcCompat=\"@drawable/${2:ic_add}\"\n    android:contentDescription=\"${3:Add}\"\n    $0/>",
+        "description": "FloatingActionButton"
+    },
+    "TextInputLayout": {
+        "prefix": "textinputlayout",
+        "body": "<com.google.android.material.textfield.TextInputLayout\n    android:id=\"@+id/${1:textInputLayout}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\"\n    style=\"@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox\">\n\n    <com.google.android.material.textfield.TextInputEditText\n        android:id=\"@+id/${2:editText}\"\n        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n        android:hint=\"${3:Label}\"\n        $0/>\n\n</com.google.android.material.textfield.TextInputLayout>",
+        "description": "TextInputLayout with EditText"
+    },
+    "BottomNavigationView": {
+        "prefix": "bottomnav",
+        "body": "<com.google.android.material.bottomnavigation.BottomNavigationView\n    android:id=\"@+id/${1:bottomNav}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\"\n    android:layout_gravity=\"bottom\"\n    app:menu=\"@menu/${2:bottom_nav_menu}\"\n    $0/>",
+        "description": "BottomNavigationView"
+    },
+    "AppBarLayout + Toolbar": {
+        "prefix": "appbar",
+        "body": "<com.google.android.material.appbar.AppBarLayout\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\">\n\n    <com.google.android.material.appbar.MaterialToolbar\n        android:id=\"@+id/${1:toolbar}\"\n        android:layout_width=\"match_parent\"\n        android:layout_height=\"?attr/actionBarSize\"\n        app:title=\"${2:Title}\"\n        $0/>\n\n</com.google.android.material.appbar.AppBarLayout>",
+        "description": "AppBarLayout with MaterialToolbar"
+    },
+    "ScrollView": {
+        "prefix": "scrollview",
+        "body": "<ScrollView\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n    <LinearLayout\n        android:layout_width=\"match_parent\"\n        android:layout_height=\"wrap_content\"\n        android:orientation=\"vertical\"\n        android:padding=\"16dp\">\n\n        $0\n\n    </LinearLayout>\n\n</ScrollView>",
+        "description": "ScrollView with LinearLayout"
+    },
+    "NestedScrollView": {
+        "prefix": "nestedscrollview",
+        "body": "<androidx.core.widget.NestedScrollView\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\">\n\n    $0\n\n</androidx.core.widget.NestedScrollView>",
+        "description": "NestedScrollView"
+    },
+    "Fragment Container": {
+        "prefix": "fragmentcontainer",
+        "body": "<androidx.fragment.app.FragmentContainerView\n    android:id=\"@+id/${1:fragmentContainer}\"\n    android:name=\"${2:com.example.MyFragment}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\"\n    $0/>",
+        "description": "FragmentContainerView"
+    },
+    "ViewPager2": {
+        "prefix": "viewpager",
+        "body": "<androidx.viewpager2.widget.ViewPager2\n    android:id=\"@+id/${1:viewPager}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\"\n    $0/>",
+        "description": "ViewPager2"
+    },
+    "TabLayout": {
+        "prefix": "tablayout",
+        "body": "<com.google.android.material.tabs.TabLayout\n    android:id=\"@+id/${1:tabLayout}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\"\n    app:tabMode=\"${2|fixed,scrollable|}\"\n    $0/>",
+        "description": "TabLayout"
+    },
+    "ChipGroup": {
+        "prefix": "chipgroup",
+        "body": "<com.google.android.material.chip.ChipGroup\n    android:id=\"@+id/${1:chipGroup}\"\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"wrap_content\"\n    app:singleSelection=\"${2|false,true|}\">\n\n    <com.google.android.material.chip.Chip\n        android:layout_width=\"wrap_content\"\n        android:layout_height=\"wrap_content\"\n        android:text=\"${3:Chip}\"\n        $0/>\n\n</com.google.android.material.chip.ChipGroup>",
+        "description": "ChipGroup with Chip"
+    },
+    "include layout": {
+        "prefix": "include",
+        "body": "<include\n    layout=\"@layout/${1:layout_name}\"\n    android:layout_width=\"${2|match_parent,wrap_content|}\"\n    android:layout_height=\"${3|wrap_content,match_parent|}\"\n    $0/>",
+        "description": "Include another layout"
+    },
+    "ProgressBar": {
+        "prefix": "progressbar",
+        "body": "<ProgressBar\n    android:id=\"@+id/${1:progressBar}\"\n    android:layout_width=\"wrap_content\"\n    android:layout_height=\"wrap_content\"\n    android:visibility=\"${2|gone,visible,invisible|}\"\n    $0/>",
+        "description": "ProgressBar"
+    },
+    "Space": {
+        "prefix": "space",
+        "body": "<Space\n    android:layout_width=\"${1|match_parent,0dp|}\"\n    android:layout_height=\"${2:16dp}\"\n    $0/>",
+        "description": "Space element"
+    },
+    "Constraint guidelines": {
+        "prefix": "guideline",
+        "body": "<androidx.constraintlayout.widget.Guideline\n    android:id=\"@+id/${1:guideline}\"\n    android:layout_width=\"wrap_content\"\n    android:layout_height=\"wrap_content\"\n    android:orientation=\"${2|vertical,horizontal|}\"\n    app:layout_constraintGuide_percent=\"${3:0.5}\"\n    $0/>",
+        "description": "ConstraintLayout Guideline"
+    }
+}
