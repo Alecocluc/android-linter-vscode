@@ -4,6 +4,7 @@ import com.alecocluc.androidls.AndroidLanguageServer.DocumentState
 import com.alecocluc.androidls.project.ProjectModel
 import com.alecocluc.androidls.resources.ResourceIndex
 import com.android.tools.lint.checks.BuiltinIssueRegistry
+import com.android.tools.lint.client.api.CompositeIssueRegistry
 import com.android.tools.lint.client.api.IssueRegistry
 import com.android.tools.lint.client.api.LintClient
 import com.android.tools.lint.detector.api.Incident
@@ -38,6 +39,7 @@ class LintEngine(
 ) {
     // The built-in issue registry — contains ALL 400+ Android Lint checks
     private lateinit var issueRegistry: IssueRegistry
+    private lateinit var executionIssueRegistry: IssueRegistry
     
     // Custom issue registries from project's lint.jar / AAR dependencies
     private val customRegistries = mutableListOf<IssueRegistry>()
@@ -75,6 +77,12 @@ class LintEngine(
         
         // Scan for custom lint rules in project
         loadCustomLintRules()
+
+        executionIssueRegistry = if (customRegistries.isNotEmpty()) {
+            CompositeIssueRegistry(listOf(issueRegistry) + customRegistries)
+        } else {
+            issueRegistry
+        }
         
         log("Total lint checks available: ${allIssues.size}")
     }
@@ -125,6 +133,8 @@ class LintEngine(
 
         if (customRegistries.isNotEmpty()) {
             log("Loaded ${customRegistries.size} custom lint registries from dependencies")
+        } else {
+            log("No custom lint registries found in project/dependency caches")
         }
     }
 
@@ -233,7 +243,7 @@ class LintEngine(
             // - Running all applicable detectors from the registry
             // - Calling our report() override for each incident found
             val request = com.android.tools.lint.client.api.LintRequest(lintClient, filesToLint)
-            lintClient.run(issueRegistry, request)
+            lintClient.run(executionIssueRegistry, request)
             
             log("Lint completed for ${file.name}: ${incidents.size} incident(s) before file filter")
         } catch (e: Exception) {
@@ -242,14 +252,26 @@ class LintEngine(
         }
         
         // Convert incidents to LSP diagnostics
-        val diagnostics = incidents.mapNotNull { incident ->
-            convertIncidentToDiagnostic(incident, file)
+        var diagnostics = incidents.mapNotNull { incident ->
+            convertIncidentToDiagnostic(incident, file, requireSameFile = true)
         }
+
+        // Fallback for path-normalization mismatches in lint incident locations.
+        // If strict matching yields nothing but lint found incidents, try filename matching.
+        if (diagnostics.isEmpty() && incidents.isNotEmpty()) {
+            diagnostics = incidents
+                .filter { it.location.file.name.equals(file.name, ignoreCase = true) }
+                .mapNotNull { convertIncidentToDiagnostic(it, file, requireSameFile = false) }
+            if (diagnostics.isNotEmpty()) {
+                log("Applied filename fallback for ${file.name}: ${diagnostics.size} diagnostic(s)")
+            }
+        }
+
         log("Diagnostics for ${file.name} after file filter: ${diagnostics.size}")
         
         // Cache results for code actions / hover
-        val results = incidents.mapNotNull { incident ->
-            val diag = convertIncidentToDiagnostic(incident, file) ?: return@mapNotNull null
+        val strictResults = incidents.mapNotNull { incident ->
+            val diag = convertIncidentToDiagnostic(incident, file, requireSameFile = true) ?: return@mapNotNull null
             LintResult(
                 incident = incident,
                 diagnostic = diag,
@@ -257,7 +279,24 @@ class LintEngine(
                 fix = incident.fix
             )
         }
-        lintResults[doc.uri] = results
+
+        val fallbackResults = if (strictResults.isEmpty() && incidents.isNotEmpty()) {
+            incidents
+                .filter { it.location.file.name.equals(file.name, ignoreCase = true) }
+                .mapNotNull { incident ->
+                    val diag = convertIncidentToDiagnostic(incident, file, requireSameFile = false) ?: return@mapNotNull null
+                    LintResult(
+                        incident = incident,
+                        diagnostic = diag,
+                        issue = incident.issue,
+                        fix = incident.fix
+                    )
+                }
+        } else {
+            emptyList()
+        }
+
+        lintResults[doc.uri] = if (strictResults.isNotEmpty()) strictResults else fallbackResults
         
         return diagnostics
     }
@@ -265,12 +304,16 @@ class LintEngine(
     /**
      * Convert a lint Incident to an LSP Diagnostic.
      */
-    private fun convertIncidentToDiagnostic(incident: Incident, contextFile: File): LspDiagnostic? {
+    private fun convertIncidentToDiagnostic(
+        incident: Incident,
+        contextFile: File,
+        requireSameFile: Boolean = true
+    ): LspDiagnostic? {
         val location = incident.location
         val file = location.file
         
         // Only report diagnostics for the file we're linting
-        if (!pathsReferToSameFile(file, contextFile)) return null
+        if (requireSameFile && !pathsReferToSameFile(file, contextFile)) return null
         
         val start = location.start
         val end = location.end
