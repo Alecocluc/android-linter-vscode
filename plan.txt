@@ -1,0 +1,390 @@
+Plan: Full Android Studio Parity Overhaul
+TL;DR: Transform the current Gradle-based lint-and-launch tool into a comprehensive Android IDE layer for VS Code. The core architectural change is building a Kotlin/JVM Language Server ("Android Language Server" — ALS) that embeds the Android Lint library (com.android.tools.lint:lint-api + lint-checks) for true real-time, single-file linting with 1:1 parity (400+ built-in checks). The server also hosts the Kotlin Analysis API for IntelliSense, an XML schema-driven completion engine for layout/manifest editing, and a resource index for R.* navigation. The TypeScript extension becomes a thin LSP client + UI layer (webviews, tree views, debug adapter). ADB-based tooling (emulator management, profiling, database inspector, etc.) is added as extension-side modules.
+
+Architecture
+Steps
+Phase 1 — Android Language Server (ALS) Core
+1. Create the Kotlin/JVM server project
+
+New directory: server/ alongside src (Gradle-based Kotlin project)
+Dependencies: com.android.tools.lint:lint:32.0.0, com.android.tools.lint:lint-api:32.0.0, com.android.tools.lint:lint-checks:32.0.0, org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1 (LSP for JVM), org.jetbrains.kotlin:kotlin-compiler-embeddable
+Build produces a fat JAR: android-language-server.jar
+Extension auto-downloads or bundles the JAR; launches via java -jar on activation
+2. Implement custom LintClient for IDE-mode linting
+
+Subclass com.android.tools.lint.client.api.LintClient (type = CLIENT_IDE)
+Override file I/O to read from in-memory buffers (dirty unsaved files from VS Code)
+Override classpath resolution: parse the project's build/intermediates for compiled classes + android.jar from SDK
+Override getConfiguration() to respect project's lint.xml and lintOptions from build.gradle
+Override report() to convert Incident objects to LSP Diagnostic objects and push them via textDocument/publishDiagnostics
+This gives 1:1 lint check parity — every check in lint-checks runs identically to Android Studio
+3. Implement the lint engine lifecycle
+
+On server start: load the IssueRegistry from lint-checks (400+ checks) + scan for custom lint JARs in project's lint/ directory and AAR dependencies
+On textDocument/didOpen and textDocument/didChange: queue a single-file lint run via LintDriver with scope limited to the changed file — this runs in ~100-500ms per file (vs 10-60s for Gradle)
+On textDocument/didSave: optionally trigger a broader lint pass (multi-file checks like UnusedResources need project-wide scope)
+Background: periodic full-project lint for cross-file checks, results merged
+Cache LintDriver state across runs for performance
+4. Implement LSP protocol handlers
+
+textDocument/publishDiagnostics — push lint findings as diagnostics
+textDocument/codeAction — quick fixes from lint's LintFix objects (which contain structured fix data: SetAttribute, ReplaceString, CreateFile, AnnotateFix, GroupFix, etc.)
+textDocument/hover — lint issue explanations (each Issue has getExplanation() with full HTML docs)
+Map the existing code action logic from codeActionProvider.ts to server-side LintFix resolution
+5. Wire the TypeScript extension as an LSP client
+
+Add vscode-languageclient dependency
+In extension.ts: start the ALS process, create LanguageClient, connect stdio transport
+Remove the current Gradle-based lint pipeline: gradleLintRunner.ts, lintReportParser.ts, lintManager.ts, diagnosticProvider.ts, codeActionProvider.ts — all replaced by LSP
+Keep gradleProcessManager.ts for build/install tasks
+Phase 2 — Kotlin/Java IntelliSense
+6. Embed Kotlin compiler analysis in the ALS
+
+Use kotlin-compiler-embeddable to create a KotlinCoreEnvironment on server startup
+Resolve project classpath from Gradle model (run gradle dependencies --configuration debugCompileClasspath once and cache)
+On file open/change: compile individual files against cached BindingContext for incremental analysis
+Expose via LSP: textDocument/completion, textDocument/signatureHelp, textDocument/definition, textDocument/references, textDocument/rename, textDocument/documentSymbol
+This replaces the regex-based definitionProvider.ts, referenceProvider.ts, and hoverProvider.ts with semantic analysis
+Provide Android SDK completions (android.jar on classpath), library completions (AAR/JAR dependencies)
+7. Java language support
+
+Use javac API or Eclipse JDT Core for Java file analysis (many Android projects still have Java code)
+Alternatively, coexist with Red Hat's Java Language Server (let users install it; ALS focuses on Android-specific features)
+Phase 3 — XML Intelligence
+8. Build the XML schema engine
+
+Parse android_sdk/platforms/android-XX/data/res/values/attrs.xml — this is the single source of truth for all Android XML attributes, their formats, enum/flag values
+Parse android_sdk/platforms/android-XX/data/res/values/attrs_manifest.xml for AndroidManifest.xml schema
+Build a schema model: element → allowed attributes → value types → enum options
+Also parse library AARs for custom attribute definitions (res/values/attrs.xml inside AARs)
+9. XML completions via LSP
+
+textDocument/completion for XML files:
+Element names (View types: TextView, LinearLayout, androidx.recyclerview.widget.RecyclerView, etc.)
+Attribute names (filtered by element type)
+Attribute values (enum values, resource references @string/, @drawable/, color literals, dimension literals)
+Namespace completions (xmlns:app, xmlns:tools)
+textDocument/hover for XML attributes: show documentation from attrs.xml comments
+textDocument/definition for resource references: @string/foo → res/values/strings.xml at the right line
+10. Manifest intelligence
+
+Schema-driven completion for AndroidManifest.xml (activities, permissions, intent-filters)
+Validation: required attributes, valid permission names, correct intent-filter structure
+Quick fixes: add missing android:exported, add missing permissions
+Phase 4 — Resource System
+11. Build a resource index
+
+On project open: scan all res/ directories (main + build variant source sets)
+Index all resources: string, drawable, layout, color, dimen, style, id, menu, anim, mipmap, font, etc.
+Watch res/ directories for changes, update index incrementally
+Also parse R.txt from build output as a fast bootstrap
+Use AAPT2 in daemon mode for on-the-fly resource validation
+12. Resource navigation
+
+R.string.app_name → goto res/values/strings.xml at the <string name="app_name"> line
+R.layout.activity_main → goto res/layout/activity_main.xml
+R.drawable.icon → goto the drawable file (PNG/XML/vector)
+@string/app_name in XML → goto strings.xml
+@layout/item_row in XML → goto layout file
+Bidirectional: from resource definition, find all usages in code and XML
+13. Resource browser tree view
+
+New tree view in the Android Explorer sidebar: browse all resources by type
+Show resource qualifiers (default, night, hdpi, etc.)
+Preview drawables inline (SVG viewer for vector drawables)
+String resource management: view all strings, detect missing translations, show translation matrix
+14. Enhanced string extraction
+
+Improve the current extractString command from extension.ts
+Support extracting from Kotlin/Java string literals AND XML android:text="..." attributes
+Auto-generate resource name from string content
+Show existing matching strings to avoid duplicates
+Support plurals extraction
+Phase 5 — Build System Intelligence
+15. Gradle project model
+
+On project open: run gradle :app:dependencies and cache the full dependency tree
+Parse build.gradle / build.gradle.kts for: applicationId, minSdk, targetSdk, compileSdk, build types, product flavors, signing configs, dependencies
+Detect multi-module projects (parse settings.gradle)
+Watch build.gradle files for changes, prompt re-sync
+16. Build variant selector
+
+New UI in the status bar: [debug | release] variant picker
+List all buildType × productFlavor combinations
+Switching variant updates: lint configuration, source sets in scope, resource qualifiers, classpath, application ID suffix
+Persist selected variant per module
+17. Gradle sync
+
+"Sync Project" command that re-resolves dependencies, updates classpath, regenerates resource index
+Progress indicator in status bar
+Show sync errors in the Problems panel (missing SDK, dependency resolution failures, etc.)
+Auto-sync on build.gradle changes (with debounce)
+Phase 6 — Emulator & Device Management
+18. Emulator management
+
+Detect SDK location: ANDROID_HOME / ANDROID_SDK_ROOT env vars or settings
+List AVDs: emulator -list-avds
+Start emulator: emulator @NAME with options (cold boot, wipe data, GPU mode)
+Stop emulator: adb -s emulator-XXXX emu kill
+New tree view section in Android Explorer: Emulators with start/stop/cold-boot buttons
+Show emulator status (running/stopped) with auto-refresh
+19. AVD creation wizard
+
+List available system images: avdmanager list target
+List device definitions: avdmanager list device
+Multi-step quick pick UI: device shape → API level → system image → AVD name
+Create: avdmanager create avd -n NAME -k "system-images;android-XX;google_apis;x86_64" -d "DEVICE_ID"
+20. Enhanced device management
+
+Extend androidDeviceManager.ts:
+Show device details: model, Android version, API level, screen size, battery level
+Install APK by drag-and-drop or file picker
+Uninstall app from device
+Screen capture: adb exec-out screencap -p > screen.png
+Screen record: adb shell screenrecord /sdcard/screen.mp4
+File explorer: push/pull files via ADB
+Shell access: open ADB shell in VS Code terminal
+Phase 7 — Debugging
+21. Build a Debug Adapter for Android
+
+New file: src/debugAdapter.ts implementing the Debug Adapter Protocol (DAP)
+JDWP connection flow:
+Build & install debug APK (gradle installDebug)
+Launch app with -D (debug wait) via adb shell am start -D
+Get PID: adb shell pidof <package>
+Forward: adb forward tcp:LOCAL_PORT jdwp:PID
+Connect JDWP client to localhost:LOCAL_PORT
+Implement JDWP protocol (reference: android-dev-ext source or the JDWP spec):
+Set/remove breakpoints
+Step over/into/out
+Variable inspection (locals, fields, statics)
+Expression evaluation
+Thread listing and switching
+Exception breakpoints
+Source mapping: use Gradle's output to map class files to source files
+22. Launch configurations
+
+Contribute launch.json snippets for "type": "android"
+Support configurations: launch app, attach to process, run tests
+Integrate with build variant selector (debug vs release)
+Phase 8 — Profiling & Diagnostics
+23. CPU/Memory profiler webview
+
+New webview panel: "Android Profiler"
+CPU: Use adb shell dumpsys cpuinfo <package> for real-time CPU usage, display as a time-series chart
+Memory: Use adb shell dumpsys meminfo <package> for heap stats (Java, Native, Graphics, etc.), display as stacked area chart
+Detailed profiling: Launch perfetto trace, download .perfetto-trace, display link to open in ui.perfetto.dev or embed a simplified viewer
+Method tracing: adb shell am profile start <pid> /data/local/tmp/trace.trace → pull → display flame chart
+Polling-based data collection (configurable interval, default 1s)
+24. Database inspector
+
+List databases: adb shell run-as <package> ls databases/
+Pull database: adb exec-out run-as <package> cat databases/DB_NAME > local_copy.db
+Webview with SQL query interface using a bundled SQLite WASM module
+Table browser, schema viewer, data editor
+Auto-refresh on app restart
+25. Network inspector
+
+Integrate with Perfetto network tracing
+Alternatively: provide an OkHttp interceptor library that logs to logcat in a structured format, then parse from logcat stream
+Display request/response in a webview table (method, URL, status, duration, size)
+Request/response detail view with headers and body
+26. APK analyzer
+
+Use SDK's apkanalyzer CLI tool
+Commands: apkanalyzer apk file-size, apk download-size, dex references, manifest print, resources packages, etc.
+Display in a tree view: file sizes, DEX method counts, resource breakdown, manifest content
+Compare APKs (size diff between builds)
+Phase 9 — Layout Tools
+27. XML Layout preview (best-effort)
+
+Integrate layoutlib from the SDK (android_sdk/platforms/android-XX/data/layoutlib.jar)
+Implement LayoutlibCallback: resolve project resources from the resource index, load custom view classes from build output
+Render to BufferedImage → encode as PNG → display in a webview panel side-by-side with the XML editor
+Support: device selection, theme selection, API level selection, orientation toggle
+Limitation: Custom views that depend on runtime state won't render (show placeholder instead)
+Re-render on XML file save
+28. Layout inspector (live)
+
+Use adb shell dumpsys activity top to get the current view hierarchy
+Or use adb shell uiautomator dump for the view tree XML
+Display as an interactive tree with properties panel
+Overlay view bounds on a screenshot
+29. Compose preview (stretch goal)
+
+Requires compiling @Preview composables and rendering via layoutlib + Compose runtime
+This is the hardest feature — defer unless the Compose team provides standalone preview tooling
+For now: detect @Preview annotations and show a "Run Preview on Device" action that installs and launches a preview activity
+Phase 10 — Refactoring & Productivity
+30. Rename refactoring
+
+Kotlin/Java: delegate to Kotlin Analysis API in the ALS → LSP textDocument/rename
+Resources: rename R.string.foo → update strings.xml + all code references + all XML @string/foo references
+Activities/Fragments: rename class → update manifest registration
+31. Safe delete
+
+Check references before deleting files/resources
+Warn about usages in code, XML, and manifest
+32. Move refactoring
+
+Move class between packages: update imports across project
+Move resource file between qualifier directories
+33. Code generation
+
+Generate activity/fragment/viewModel from templates
+Generate RecyclerView adapter boilerplate
+Intent builder generation
+Parcelable/Serializable implementation
+34. Live templates / snippets
+
+Port Android Studio's live templates as VS Code snippets
+logd → Log.d(TAG, "message"), toast → Toast.makeText(...), foreach → for (item in list) { }, etc.
+Context-aware (only show Android snippets in Android project files)
+Phase 11 — Polish & Integration
+35. Unified status bar
+
+Status bar items: [Device: Pixel 7] [Variant: debug] [Sync: OK] [ALS: Running]
+Clickable to change device, variant, re-sync, restart server
+36. Problem matchers & build output
+
+Parse Gradle build output for errors/warnings and show in Problems panel
+Clickable error locations in build output
+Kotlin compiler errors with proper file/line mapping
+37. Settings migration
+
+Migrate old settings namespace to new expanded settings
+Backward compatibility for existing users
+New settings for: SDK path, ALS JVM args, profiler polling interval, layout preview device, etc.
+38. Auto-download & bundling
+
+On first activation: check for JDK, Android SDK, detect paths
+Auto-download the ALS JAR from GitHub Releases
+Version check: prompt to update ALS when extension updates
+Show guided setup wizard if prerequisites are missing
+39. Testing support
+
+Run unit tests: gradle test with result parsing
+Run instrumented tests: gradle connectedAndroidTest with result parsing
+Test explorer integration (VS Code Test API)
+Show test results in a tree view with pass/fail/skip status
+40. Gradle task runner
+
+android-linter-vscode/
+├── package.json                    # Extension manifest (expanded)
+├── tsconfig.json
+├── esbuild.js
+├── src/                            # TypeScript extension (VS Code client)
+│   ├── extension.ts                # Entry point (refactored: LSP client init)
+│   ├── languageClient.ts           # LSP client management, server lifecycle
+│   ├── android/
+│   │   ├── deviceManager.ts        # Enhanced device management
+│   │   ├── emulatorManager.ts      # NEW: AVD management
+│   │   ├── adbWirelessManager.ts   # Existing (kept)
+│   │   ├── appLauncher.ts          # Existing (refactored)
+│   │   └── projectInfo.ts          # Existing (mostly replaced by ALS)
+│   ├── build/
+│   │   ├── gradleProcessManager.ts # Existing (kept)
+│   │   ├── variantManager.ts       # NEW: Build variant management
+│   │   ├── gradleSync.ts           # NEW: Gradle sync logic
+│   │   └── taskRunner.ts           # NEW: Gradle task tree
+│   ├── debug/
+│   │   ├── debugAdapter.ts         # NEW: JDWP Debug Adapter
+│   │   ├── jdwpClient.ts           # NEW: JDWP protocol implementation
+│   │   └── launchConfig.ts         # NEW: Launch configuration provider
+│   ├── profiling/
+│   │   ├── profileManager.ts       # NEW: Profiling orchestration
+│   │   ├── cpuProfiler.ts          # NEW: CPU data collection
+│   │   ├── memoryProfiler.ts       # NEW: Memory data collection
+│   │   └── profilerWebview.ts      # NEW: Profiler visualization
+│   ├── tools/
+│   │   ├── databaseInspector.ts    # NEW: SQLite inspector
+│   │   ├── networkInspector.ts     # NEW: Network monitoring
+│   │   ├── apkAnalyzer.ts          # NEW: APK analysis
+│   │   ├── layoutInspector.ts      # NEW: Live layout inspector
+│   │   └── screenCapture.ts        # NEW: Screenshot/screenrecord
+│   ├── views/
+│   │   ├── androidExplorer.ts      # Existing (expanded with emulators, tasks)
+│   │   ├── resourceBrowser.ts      # NEW: Resource tree view
+│   │   ├── testExplorer.ts         # NEW: Test runner integration
+│   │   └── gradleTaskView.ts       # NEW: Gradle tasks tree
+│   ├── webviews/
+│   │   ├── logcatWebview.ts        # Existing
+│   │   ├── profilerWebview.ts      # NEW
+│   │   ├── databaseWebview.ts      # NEW
+│   │   ├── networkWebview.ts       # NEW
+│   │   ├── apkWebview.ts           # NEW
+│   │   └── layoutPreview.ts        # NEW: Layout preview panel
+│   ├── logcat/
+│   │   ├── logcatManager.ts        # Existing
+│   │   └── logcatParser.ts         # Existing
+│   ├── snippets/                   # NEW: Android snippet definitions
+│   ├── constants.ts                # Expanded
+│   └── logger.ts                   # Existing
+├── server/                         # NEW: Kotlin/JVM Language Server
+│   ├── build.gradle.kts            # Gradle build for the server
+│   ├── settings.gradle.kts
+│   └── src/main/kotlin/
+│       ├── Main.kt                 # Server entry point
+│       ├── AndroidLanguageServer.kt # LSP server implementation
+│       ├── lint/
+│       │   ├── IdeLintClient.kt    # Custom LintClient for IDE mode
+│       │   ├── LintEngine.kt       # Lint orchestration, file-level scoping
+│       │   ├── LintFixConverter.kt # LintFix → LSP CodeAction mapping
+│       │   └── LintDiagnosticPublisher.kt
+│       ├── kotlin/
+│       │   ├── KotlinAnalyzer.kt   # kotlin-compiler-embeddable integration
+│       │   ├── CompletionProvider.kt
+│       │   ├── DefinitionProvider.kt
+│       │   └── ReferenceProvider.kt
+│       ├── xml/
+│       │   ├── XmlSchemaProvider.kt  # attrs.xml parser
+│       │   ├── XmlCompletionProvider.kt
+│       │   └── ManifestValidator.kt
+│       ├── resources/
+│       │   ├── ResourceIndex.kt    # Resource scanner/indexer
+│       │   ├── ResourceNavigator.kt
+│       │   └── AaptDaemon.kt       # AAPT2 daemon mode wrapper
+│       ├── project/
+│       │   ├── ProjectModel.kt     # Multi-module project model
+│       │   ├── GradleModelParser.kt
+│       │   └── VariantManager.kt
+│       └── layout/
+│           ├── LayoutRenderer.kt   # layoutlib integration
+│           └── LayoutlibBridge.kt
+└── snippets/                       # NEW: Snippet JSON files
+    ├── kotlin-android.json
+    └── xml-android.json
+
+Tree view of all available Gradle tasks (from gradle tasks)
+Click-to-run any task
+Task history with re-run capability
+Custom task definitions in settings
+Project Structure (After Overhaul)
+How to Get Lint Definitions (1:1 Android Studio Parity)
+The lint checks are not proprietary — they're published as open-source Maven artifacts:
+
+Download from Google Maven: https://maven.google.com/com/android/tools/lint/lint-checks/32.0.0/lint-checks-32.0.0.jar — this single JAR contains all 400+ built-in lint checks identical to what Android Studio uses
+Source code: https://android.googlesource.com/platform/tools/base/+/refs/heads/mirror-goog-studio-main/lint/libs/lint-checks/src/main/java/com/android/tools/lint/checks/ — every detector is readable
+Custom lint checks from libraries: When your project depends on an AAR (e.g., Compose, Material), those AARs bundle their own lint.jar with additional checks. The ALS should scan AAR dependencies and load their IssueRegistry classes
+Your own custom lint rules: Projects can have a lint-checks module — the ALS should detect and load those too
+The com.android.tools.lint:lint-checks artifact IS Android Studio's lint engine. By embedding it, you get exactly the same checks, severities, and fix suggestions.
+
+Verification
+Real-time lint: Open a Kotlin file with a HardcodedText string in a TextView → diagnostic appears in <1 second (vs current 10-60s)
+IntelliSense: Type Toast. in a Kotlin file → see makeText() completion with parameter hints
+XML completion: Type <Text in a layout XML → see TextView, TextInputLayout completions; type android: → see valid attributes for that element
+Resource navigation: Ctrl+Click R.string.app_name → jumps to strings.xml at the correct line
+Build variants: Click variant picker → switch from debug to release → lint re-analyzes with release configuration
+Emulator: Click "Start" on an AVD in the explorer → emulator window appears; device shows in the connected devices list
+Debugging: Set breakpoint in Activity → F5 → app pauses at breakpoint, variables visible in Debug panel
+Profiling: Open profiler webview → see real-time CPU/memory charts while app is running
+Database: Open database inspector → see tables, run SQL queries against the live app database
+Layout preview: Open an XML layout → see side-by-side rendered preview that updates on save
+Decisions
+Kotlin/JVM server over TypeScript-only: Necessary because lint-api, lint-checks, kotlin-compiler-embeddable, and layoutlib are JVM libraries with no JS equivalent. The TypeScript extension becomes a thin client.
+LSP with custom extensions over pure custom protocol: Gives us standard diagnostics/completion/navigation for free, while custom JSON-RPC methods handle Android-specific features (resource index, layout preview, variant switching). Same pattern as Metals (Scala).
+Embed lint-checks directly over Gradle lint: Eliminates the 10-60s Gradle overhead. Single-file lint runs in <500ms. This IS what Android Studio does internally.
+kotlin-compiler-embeddable over JetBrains' kotlin-lsp: kotlin-lsp is pre-alpha, partially closed-source, and doesn't support Android. Building on the compiler directly gives full control, and fwcd/kotlin-language-server proves it's viable.
+Layout preview via layoutlib over skipping it: Hard but achievable for XML layouts. Compose preview deferred as a stretch goal (requires full Compose compiler integration).
+Custom JDWP debug adapter over forking android-dev-ext: android-dev-ext is abandoned (3 years), no types, limited features. A clean implementation using the well-documented JDWP spec is more maintainable.
+ADB-based profiling over Android Profiler replication: The profiler UI is proprietary, but all data is collectible via dumpsys, perfetto, simpleperf. A custom webview can visualize it.
