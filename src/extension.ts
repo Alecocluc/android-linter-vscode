@@ -65,9 +65,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     adbWirelessManager = new AdbWirelessManager(outputChannel, deviceManager.getAdbPath());
 
-    // Keep Gradle lint active as a fallback while ALS lint parity is in progress.
-    // This guarantees Kotlin/Java/XML lint diagnostics even when the server is running.
-    initGradleLintFallback(context);
+    // NOTE: Gradle lint fallback is NOT initialized here.
+    // When ALS is enabled (default), the language server handles all linting.
+    // Gradle lint is only initialized as a fallback when:
+    //   - The server is disabled in settings
+    //   - The server fails to start
 
     // Initialize Android Explorer View
     androidExplorerView = new AndroidExplorerView(deviceManager, logcatManager, gradleProcessManager, context);

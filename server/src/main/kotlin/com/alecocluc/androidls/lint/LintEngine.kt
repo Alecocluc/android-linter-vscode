@@ -152,6 +152,8 @@ class LintEngine(
     
     /**
      * Perform the actual lint analysis.
+     * Uses the Android Lint library's LintCliClient.run() which internally
+     * creates a LintDriver, sets up UAST/XML parsers, and runs all applicable detectors.
      */
     private fun performLint(doc: DocumentState, broadScope: Boolean): List<LspDiagnostic> {
         val filePath = uriToPath(doc.uri) ?: return emptyList()
@@ -160,35 +162,46 @@ class LintEngine(
         // Determine which module this file belongs to
         val module = projectModel.findModuleForFile(file) ?: return emptyList()
         
-        // Build in-memory file content map
-        val fileContents = mapOf(doc.uri to doc.content)
-        
-        // Collect incidents
+        // Collect incidents reported by lint detectors
         val incidents = mutableListOf<Incident>()
         
         val lintClient = IdeLintClient(
             projectModel = projectModel,
-            fileContents = fileContents,
-            incidentHandler = { incident -> incidents.add(incident) }
+            fileContents = mapOf(doc.uri to doc.content),
+            incidentHandler = { incident ->
+                synchronized(incidents) { incidents.add(incident) }
+            }
         )
         
-        // For now, run checks that apply to single files
-        // In broadScope mode, we'd include cross-file checks
-        val applicableIssues = if (broadScope) {
-            allIssues
-        } else {
-            // Filter to checks that can work on a single file
-            allIssues.filter { issue ->
-                val scopes = issue.implementation.scope
-                when (doc.languageId) {
-                    "kotlin", "java" -> scopes.contains(Scope.JAVA_FILE) || 
-                                        scopes.contains(Scope.ALL_JAVA_FILES)
-                    "xml" -> scopes.contains(Scope.RESOURCE_FILE) || 
-                             scopes.contains(Scope.ALL_RESOURCE_FILES) ||
-                             scopes.contains(Scope.MANIFEST)
-                    else -> false
+        try {
+            // Determine files to lint
+            val filesToLint = if (broadScope) {
+                // Broad scope: lint all source files in the module
+                module.getSourceDirs().flatMap { dir ->
+                    dir.walkTopDown().filter {
+                        it.isFile && it.extension in listOf("kt", "java", "xml")
+                    }.toList()
                 }
+            } else {
+                listOf(file)
             }
+            
+            log("Running lint on ${filesToLint.size} file(s): ${file.name}")
+            
+            // Run lint analysis using the built-in lint engine
+            // LintCliClient.run() handles everything:
+            // - Project detection (walks up to find build.gradle)
+            // - UAST environment setup (Kotlin/Java parsing via kotlin-compiler-embeddable)
+            // - XML parser setup
+            // - Running all applicable detectors from the registry
+            // - Calling our report() override for each incident found
+            val request = com.android.tools.lint.client.api.LintRequest(lintClient, filesToLint)
+            lintClient.run(issueRegistry, request)
+            
+            log("Lint completed for ${file.name}: ${incidents.size} incident(s)")
+        } catch (e: Exception) {
+            logError("Lint analysis failed for ${file.name}: ${e.message}")
+            e.printStackTrace(System.err)
         }
         
         // Convert incidents to LSP diagnostics
