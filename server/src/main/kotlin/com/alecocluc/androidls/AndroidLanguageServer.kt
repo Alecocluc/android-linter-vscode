@@ -9,6 +9,7 @@ import com.alecocluc.androidls.xml.XmlCompletionProvider
 import kotlinx.coroutines.*
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.jsonrpc.messages.Either
+import org.eclipse.lsp4j.jsonrpc.messages.Either3
 import org.eclipse.lsp4j.services.*
 import java.io.File
 import java.net.URI
@@ -19,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  * The Android Language Server — an LSP server that provides:
  * - Real-time lint diagnostics (400+ checks, identical to Android Studio)
  * - XML completions for layouts, manifests, resources
- * - Resource navigation (R.string.*, @string/*, etc.)
+ * - Resource navigation (R.string.foo, @string/foo, etc.)
  * - Code actions / quick fixes from lint
  * - Hover documentation for lint issues and Android APIs
  */
@@ -321,11 +322,10 @@ class AndroidLanguageServer : LanguageServer, LanguageClientAware {
             }
         }
 
-        override fun prepareRename(params: PrepareRenameParams): CompletableFuture<Either3<org.eclipse.lsp4j.Range, PrepareRenameResult, PrepareRenameDefaultBehavior>> {
-            return CompletableFuture.supplyAsync {
-                // TODO: Implement rename preparation
-                null
-            }
+        override fun prepareRename(params: PrepareRenameParams): CompletableFuture<Either3<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>> {
+            return CompletableFuture.completedFuture(
+                Either3.forThird(PrepareRenameDefaultBehavior(true))
+            )
         }
 
         override fun rename(params: RenameParams): CompletableFuture<WorkspaceEdit?> {

@@ -1,5 +1,12 @@
 node_modules
 out
+build
+dist
 *.vsix
 .vscode-test
 .DS_Store
+
+# Kotlin/Gradle server build artifacts
+server/.gradle/
+server/.kotlin/
+server/build/

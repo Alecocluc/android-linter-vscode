@@ -5,12 +5,18 @@ import com.alecocluc.androidls.project.ProjectModel
 import com.alecocluc.androidls.resources.ResourceIndex
 import com.android.tools.lint.checks.BuiltinIssueRegistry
 import com.android.tools.lint.client.api.IssueRegistry
-import com.android.tools.lint.detector.api.*
+import com.android.tools.lint.detector.api.Incident
+import com.android.tools.lint.detector.api.Issue
+import com.android.tools.lint.detector.api.LintFix
+import com.android.tools.lint.detector.api.Scope
+import com.android.tools.lint.detector.api.Severity
+import com.android.tools.lint.detector.api.TextFormat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.Diagnostic as LspDiagnostic
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import java.io.File
 import java.net.URI

@@ -50,6 +50,7 @@ tasks.shadowJar {
     archiveBaseName.set("android-language-server")
     archiveClassifier.set("")
     archiveVersion.set("")
+    isZip64 = true
     
     // Merge service files for proper service loading
     mergeServiceFiles()
@@ -63,8 +64,15 @@ tasks.test {
     useJUnitPlatform()
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
 kotlin {
-    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 tasks.register("buildServer") {

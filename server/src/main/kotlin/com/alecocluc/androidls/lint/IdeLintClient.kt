@@ -1,7 +1,7 @@
 package com.alecocluc.androidls.lint
 
 import com.alecocluc.androidls.project.ProjectModel
-import com.alecocluc.androidls.project.ModuleModel
+import com.android.ide.common.resources.ResourceRepository
 import com.android.tools.lint.client.api.*
 import com.android.tools.lint.detector.api.*
 import java.io.File
@@ -22,9 +22,9 @@ class IdeLintClient(
     private val projectModel: ProjectModel,
     private val fileContents: Map<String, String>,
     private val incidentHandler: (Incident) -> Unit
-) : LintClient(CLIENT_IDE) {
+) : LintClient("android-language-server") {
 
-    private val sdkHome: File? by lazy {
+    private val resolvedSdkHome: File? by lazy {
         resolveSdkHome()
     }
 
@@ -45,7 +45,7 @@ class IdeLintClient(
         return if (file.exists()) file.readText() else ""
     }
 
-    override fun log(severity: Severity, exception: Throwable?, format: String?, vararg args: Any?) {
+    override fun log(severity: Severity, exception: Throwable?, format: String?, vararg args: Any) {
         val message = if (format != null && args.isNotEmpty()) {
             String.format(format, *args)
         } else {
@@ -58,6 +58,21 @@ class IdeLintClient(
     override fun report(context: Context, incident: Incident, format: TextFormat) {
         incidentHandler(incident)
     }
+
+    override fun getGradleVisitor(): GradleVisitor {
+        throw UnsupportedOperationException("Gradle visitor is not available in IDE lint mode")
+    }
+
+    override fun getResources(project: Project, scope: ResourceRepositoryScope): ResourceRepository {
+        throw UnsupportedOperationException("Resource repository is not yet implemented")
+    }
+
+    override fun getUastParser(project: Project?): UastParser {
+        throw UnsupportedOperationException("UAST parser is not yet implemented")
+    }
+
+    override val xmlParser: XmlParser
+        get() = throw UnsupportedOperationException("XML parser is not yet implemented")
 
     override fun getClientDisplayName(): String = "Android Language Server"
 
@@ -113,14 +128,14 @@ class IdeLintClient(
      * Resolve android.jar for the given compile SDK version.
      */
     fun resolveAndroidJar(compileSdk: Int): File? {
-        val sdk = sdkHome ?: return null
+        val sdk = resolvedSdkHome ?: return null
         return File(sdk, "platforms/android-$compileSdk/android.jar").takeIf { it.exists() }
     }
 
     /**
      * Get the path to the SDK.
      */
-    fun getSdkHome(): File? = sdkHome
+    override fun getSdkHome(): File? = resolvedSdkHome
 
     companion object {
         private fun uriToPath(uri: String): String? {

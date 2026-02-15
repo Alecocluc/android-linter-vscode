@@ -3,6 +3,7 @@ package com.alecocluc.androidls.resources
 import com.alecocluc.androidls.AndroidLanguageServer.DocumentState
 import com.alecocluc.androidls.project.ProjectModel
 import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import java.io.File
 import java.net.URI
 import javax.xml.parsers.SAXParserFactory
@@ -13,7 +14,7 @@ import org.xml.sax.helpers.DefaultHandler
  * Indexes all Android resources in the project.
  * 
  * Provides:
- * - Resource completions (R.string.*, R.layout.*, @string/*, etc.)
+ * - Resource completions (R.string.name, R.layout.main, @string/name, etc.)
  * - Resource navigation (go to definition for R.* references)
  * - Resource reference finding (find all usages of a resource)
  * 
@@ -314,7 +315,7 @@ class ResourceIndex(private val projectModel: ProjectModel) {
             }.distinctBy { it.label }
         }
         
-        // @string/*, @drawable/*, etc. (XML)
+        // @string/name, @drawable/icon, etc. (XML)
         val xmlRefRegex = Regex("""@(\w+)/\s*$""")
         val xmlMatch = xmlRefRegex.find(textBefore)
         if (xmlMatch != null) {

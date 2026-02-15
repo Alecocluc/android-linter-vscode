@@ -3,6 +3,7 @@ package com.alecocluc.androidls.xml
 import com.alecocluc.androidls.AndroidLanguageServer.DocumentState
 import com.alecocluc.androidls.resources.ResourceIndex
 import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 
 /**
  * Provides XML completions for Android layout files, manifests, and resource files.
