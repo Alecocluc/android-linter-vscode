@@ -71,6 +71,7 @@ class LintEngine(
 
         // Load built-in checks (same as Android Studio)
         issueRegistry = BuiltinIssueRegistry()
+        executionIssueRegistry = issueRegistry
         allIssues.addAll(issueRegistry.issues)
         
         log("Loaded ${issueRegistry.issues.size} built-in lint checks")
@@ -251,27 +252,31 @@ class LintEngine(
             e.printStackTrace(System.err)
         }
         
-        // Convert incidents to LSP diagnostics
-        var diagnostics = incidents.mapNotNull { incident ->
-            convertIncidentToDiagnostic(incident, file, requireSameFile = true)
+        // Convert incidents to diagnostics grouped by target URI and publish all groups.
+        // This avoids path-mismatch drops when lint reports files with alternate normalization.
+        val diagnosticsByUri = mutableMapOf<String, MutableList<LspDiagnostic>>()
+        for (incident in incidents) {
+            val uri = incident.location.file.toURI().toString()
+            val diagnostic = convertIncidentToDiagnostic(incident, requireSameFile = false) ?: continue
+            diagnosticsByUri.getOrPut(uri) { mutableListOf() }.add(diagnostic)
         }
 
-        // Fallback for path-normalization mismatches in lint incident locations.
-        // If strict matching yields nothing but lint found incidents, try filename matching.
-        if (diagnostics.isEmpty() && incidents.isNotEmpty()) {
-            diagnostics = incidents
-                .filter { it.location.file.name.equals(file.name, ignoreCase = true) }
-                .mapNotNull { convertIncidentToDiagnostic(it, file, requireSameFile = false) }
-            if (diagnostics.isNotEmpty()) {
-                log("Applied filename fallback for ${file.name}: ${diagnostics.size} diagnostic(s)")
-            }
+        for ((uri, diagnostics) in diagnosticsByUri) {
+            client.publishDiagnostics(PublishDiagnosticsParams(uri, diagnostics))
         }
 
-        log("Diagnostics for ${file.name} after file filter: ${diagnostics.size}")
+        val targetDiagnostics = diagnosticsByUri
+            .filterKeys { urisReferToSameFile(it, doc.uri) }
+            .values
+            .flatten()
+
+        log("Diagnostics for ${file.name} after file filter: ${targetDiagnostics.size}")
         
         // Cache results for code actions / hover
-        val strictResults = incidents.mapNotNull { incident ->
-            val diag = convertIncidentToDiagnostic(incident, file, requireSameFile = true) ?: return@mapNotNull null
+        val targetResults = incidents.mapNotNull { incident ->
+            val incidentUri = incident.location.file.toURI().toString()
+            if (!urisReferToSameFile(incidentUri, doc.uri)) return@mapNotNull null
+            val diag = convertIncidentToDiagnostic(incident, requireSameFile = false) ?: return@mapNotNull null
             LintResult(
                 incident = incident,
                 diagnostic = diag,
@@ -280,25 +285,9 @@ class LintEngine(
             )
         }
 
-        val fallbackResults = if (strictResults.isEmpty() && incidents.isNotEmpty()) {
-            incidents
-                .filter { it.location.file.name.equals(file.name, ignoreCase = true) }
-                .mapNotNull { incident ->
-                    val diag = convertIncidentToDiagnostic(incident, file, requireSameFile = false) ?: return@mapNotNull null
-                    LintResult(
-                        incident = incident,
-                        diagnostic = diag,
-                        issue = incident.issue,
-                        fix = incident.fix
-                    )
-                }
-        } else {
-            emptyList()
-        }
-
-        lintResults[doc.uri] = if (strictResults.isNotEmpty()) strictResults else fallbackResults
+        lintResults[doc.uri] = targetResults
         
-        return diagnostics
+        return targetDiagnostics
     }
     
     /**
@@ -306,14 +295,14 @@ class LintEngine(
      */
     private fun convertIncidentToDiagnostic(
         incident: Incident,
-        contextFile: File,
-        requireSameFile: Boolean = true
+        requireSameFile: Boolean = false,
+        contextFile: File? = null
     ): LspDiagnostic? {
         val location = incident.location
         val file = location.file
         
         // Only report diagnostics for the file we're linting
-        if (requireSameFile && !pathsReferToSameFile(file, contextFile)) return null
+        if (requireSameFile && contextFile != null && !pathsReferToSameFile(file, contextFile)) return null
         
         val start = location.start
         val end = location.end
@@ -534,6 +523,12 @@ class LintEngine(
 
         // Fallback for cases where lint reports relative/alternate roots
         return aAbs.endsWith("/${b.name}") && bAbs.endsWith("/${b.name}")
+    }
+
+    private fun urisReferToSameFile(uriA: String, uriB: String): Boolean {
+        val pathA = uriToPath(uriA) ?: return false
+        val pathB = uriToPath(uriB) ?: return false
+        return pathsReferToSameFile(File(pathA), File(pathB))
     }
 
     companion object {
