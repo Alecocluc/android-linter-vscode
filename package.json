@@ -186,6 +186,19 @@
         "path": "./snippets/xml-android.json"
       }
     ],
+    "languages": [
+      {
+        "id": "kotlin",
+        "aliases": [
+          "Kotlin",
+          "kotlin"
+        ],
+        "extensions": [
+          ".kt",
+          ".kts"
+        ]
+      }
+    ],
     "configuration": {
       "title": "Android Linter",
       "properties": {

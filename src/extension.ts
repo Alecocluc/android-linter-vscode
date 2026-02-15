@@ -171,8 +171,7 @@ function initGradleLintFallback(context: vscode.ExtensionContext) {
         vscode.workspace.onDidOpenTextDocument(async (document) => {
             logger.file(`File opened: ${document.fileName} (language: ${document.languageId})`);
             const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-            const serverEnabled = config.get<boolean>(CONFIG_KEYS.SERVER_ENABLED, true);
-            const shouldLintOnOpen = config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && !serverEnabled;
+            const shouldLintOnOpen = config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN);
             if (shouldLintOnOpen && isAndroidFile(document)) {
                 logger.log(`   ▶️ Running lint on ${document.fileName}`);
                 await lintManager.lintFile(document);
@@ -205,8 +204,7 @@ function initGradleLintFallback(context: vscode.ExtensionContext) {
 
     // Lint currently open files on activation
     const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-    const serverEnabled = config.get<boolean>(CONFIG_KEYS.SERVER_ENABLED, true);
-    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN) && !serverEnabled) {
+    if (config.get<boolean>(CONFIG_KEYS.LINT_ON_OPEN)) {
         vscode.workspace.textDocuments.forEach(async (document) => {
             if (isAndroidFile(document)) {
                 await lintManager.lintFile(document);
