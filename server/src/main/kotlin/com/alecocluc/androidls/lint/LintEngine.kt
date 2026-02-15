@@ -85,34 +85,73 @@ class LintEngine(
      * 2. AAR dependencies that bundle lint.jar
      */
     private fun loadCustomLintRules() {
+        val visited = mutableSetOf<String>()
+
         for (module in projectModel.modules) {
             // Check for lint.jar in build/intermediates
-            val lintJarPaths = listOf(
+            val lintJarPaths = mutableListOf(
                 File(module.path, "build/intermediates/lint/lint.jar"),
                 File(module.path, "lint/lint.jar")
             )
+
+            // Also scan common Gradle output/cache locations for dependency lint.jar files
+            lintJarPaths.addAll(findDependencyLintJars(module.path))
+            lintJarPaths.addAll(findDependencyLintJars(projectModel.rootDir))
+
             for (jarPath in lintJarPaths) {
-                if (jarPath.exists()) {
-                    try {
-                        // Load custom IssueRegistry from JAR
-                        val classLoader = java.net.URLClassLoader(
-                            arrayOf(jarPath.toURI().toURL()),
-                            this::class.java.classLoader
-                        )
-                        val registryClass = java.util.ServiceLoader.load(
-                            IssueRegistry::class.java, classLoader
-                        )
-                        for (registry in registryClass) {
-                            customRegistries.add(registry)
-                            allIssues.addAll(registry.issues)
-                            log("Loaded custom lint rules from ${jarPath.name}: ${registry.issues.size} checks")
-                        }
-                    } catch (e: Exception) {
-                        logError("Failed to load custom lint rules from $jarPath: ${e.message}")
+                if (!jarPath.exists()) continue
+                val normalized = jarPath.absolutePath.lowercase()
+                if (!visited.add(normalized)) continue
+
+                try {
+                    // Load custom IssueRegistry from JAR
+                    val classLoader = java.net.URLClassLoader(
+                        arrayOf(jarPath.toURI().toURL()),
+                        this::class.java.classLoader
+                    )
+                    val registryClass = java.util.ServiceLoader.load(
+                        IssueRegistry::class.java, classLoader
+                    )
+                    for (registry in registryClass) {
+                        customRegistries.add(registry)
+                        allIssues.addAll(registry.issues)
+                        log("Loaded custom lint rules from ${jarPath.absolutePath}: ${registry.issues.size} checks")
                     }
+                } catch (e: Exception) {
+                    logError("Failed to load custom lint rules from $jarPath: ${e.message}")
                 }
             }
         }
+
+        if (customRegistries.isNotEmpty()) {
+            log("Loaded ${customRegistries.size} custom lint registries from dependencies")
+        }
+    }
+
+    private fun findDependencyLintJars(baseDir: File): List<File> {
+        if (!baseDir.exists() || !baseDir.isDirectory) return emptyList()
+
+        val candidates = mutableListOf<File>()
+        val gradleCacheDir = File(System.getProperty("user.home"), ".gradle/caches")
+        val roots = listOf(
+            File(baseDir, "build/intermediates"),
+            File(baseDir, "build/tmp"),
+            File(baseDir, ".gradle"),
+            gradleCacheDir
+        ).filter { it.exists() && it.isDirectory }
+
+        for (root in roots) {
+            try {
+                root.walkTopDown()
+                    .maxDepth(10)
+                    .filter { it.isFile && it.name.equals("lint.jar", ignoreCase = true) }
+                    .forEach { candidates.add(it) }
+            } catch (_: Exception) {
+                // Ignore scanning errors for locked/ephemeral Gradle cache files
+            }
+        }
+
+        return candidates
     }
 
     /**
@@ -174,19 +213,17 @@ class LintEngine(
         )
         
         try {
-            // Determine files to lint
+            // Important: run lint with project/module context (directory input), not only a single
+            // source file. This allows LintCliClient to correctly initialize the Android project,
+            // read Gradle/lint model metadata, and resolve classpath/type information.
+            // We still filter final diagnostics back to the opened file.
             val filesToLint = if (broadScope) {
-                // Broad scope: lint all source files in the module
-                module.getSourceDirs().flatMap { dir ->
-                    dir.walkTopDown().filter {
-                        it.isFile && it.extension in listOf("kt", "java", "xml")
-                    }.toList()
-                }
+                listOf(projectModel.rootDir)
             } else {
-                listOf(file)
+                listOf(module.path)
             }
             
-            log("Running lint on ${filesToLint.size} file(s): ${file.name}")
+            log("Running lint with context: ${filesToLint.first().absolutePath} (target=${file.name})")
             
             // Run lint analysis using the built-in lint engine
             // LintCliClient.run() handles everything:
@@ -198,7 +235,7 @@ class LintEngine(
             val request = com.android.tools.lint.client.api.LintRequest(lintClient, filesToLint)
             lintClient.run(issueRegistry, request)
             
-            log("Lint completed for ${file.name}: ${incidents.size} incident(s)")
+            log("Lint completed for ${file.name}: ${incidents.size} incident(s) before file filter")
         } catch (e: Exception) {
             logError("Lint analysis failed for ${file.name}: ${e.message}")
             e.printStackTrace(System.err)
@@ -208,6 +245,7 @@ class LintEngine(
         val diagnostics = incidents.mapNotNull { incident ->
             convertIncidentToDiagnostic(incident, file)
         }
+        log("Diagnostics for ${file.name} after file filter: ${diagnostics.size}")
         
         // Cache results for code actions / hover
         val results = incidents.mapNotNull { incident ->
@@ -232,7 +270,7 @@ class LintEngine(
         val file = location.file
         
         // Only report diagnostics for the file we're linting
-        if (file.absolutePath != contextFile.absolutePath) return null
+        if (!pathsReferToSameFile(file, contextFile)) return null
         
         val start = location.start
         val end = location.end
@@ -432,6 +470,27 @@ class LintEngine(
     
     private fun logError(message: String) {
         client.logMessage(MessageParams(MessageType.Error, "[LintEngine] $message"))
+    }
+
+    private fun pathsReferToSameFile(a: File, b: File): Boolean {
+        fun normalize(path: String): String {
+            var p = path.replace('\\', '/').trim()
+            if (p.length > 2 && p[1] == ':') {
+                p = p[0].lowercaseChar() + p.substring(1)
+            }
+            return p
+        }
+
+        val aAbs = normalize(a.absolutePath)
+        val bAbs = normalize(b.absolutePath)
+        if (aAbs == bAbs) return true
+
+        val aCan = runCatching { normalize(a.canonicalPath) }.getOrNull()
+        val bCan = runCatching { normalize(b.canonicalPath) }.getOrNull()
+        if (aCan != null && bCan != null && aCan == bCan) return true
+
+        // Fallback for cases where lint reports relative/alternate roots
+        return aAbs.endsWith("/${b.name}") && bAbs.endsWith("/${b.name}")
     }
 
     companion object {
