@@ -5,6 +5,7 @@ import com.alecocluc.androidls.project.ProjectModel
 import com.alecocluc.androidls.resources.ResourceIndex
 import com.android.tools.lint.checks.BuiltinIssueRegistry
 import com.android.tools.lint.client.api.IssueRegistry
+import com.android.tools.lint.client.api.LintClient
 import com.android.tools.lint.detector.api.Incident
 import com.android.tools.lint.detector.api.Issue
 import com.android.tools.lint.detector.api.LintFix
@@ -63,6 +64,9 @@ class LintEngine(
      * Loads the built-in issue registry and scans for custom lint rules.
      */
     fun initialize() {
+        // Required by lint internals before loading built-in detectors
+        LintClient.clientName = "android-language-server"
+
         // Load built-in checks (same as Android Studio)
         issueRegistry = BuiltinIssueRegistry()
         allIssues.addAll(issueRegistry.issues)

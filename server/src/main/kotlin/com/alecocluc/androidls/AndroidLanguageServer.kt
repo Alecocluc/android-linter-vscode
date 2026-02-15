@@ -115,6 +115,10 @@ class AndroidLanguageServer : LanguageServer, LanguageClientAware {
         }
     }
 
+    override fun setTrace(params: SetTraceParams) {
+        // VS Code sends this by default; no-op to avoid UnsupportedOperationException.
+    }
+
     override fun initialized(params: InitializedParams) {
         log("Android Language Server initialized, starting background setup...")
         
