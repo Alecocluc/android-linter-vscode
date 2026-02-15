@@ -194,6 +194,12 @@ export class LanguageClientManager implements vscode.Disposable {
      */
     private async resolveServerJar(): Promise<string | undefined> {
         const extensionPath = this.context.extensionPath;
+
+        // Check extension source build output (Extension Development Host)
+        const extensionDevJar = path.join(extensionPath, 'server', 'build', 'libs', 'android-language-server.jar');
+        if (fs.existsSync(extensionDevJar)) {
+            return extensionDevJar;
+        }
         
         // Check workspace server build output
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -251,12 +257,9 @@ export class LanguageClientManager implements vscode.Disposable {
      * Build the server JAR from source.
      */
     private async buildServer(): Promise<void> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) return;
-        
-        const serverDir = path.join(workspaceFolders[0].uri.fsPath, 'server');
+        const serverDir = path.join(this.context.extensionPath, 'server');
         if (!fs.existsSync(serverDir)) {
-            vscode.window.showErrorMessage('server/ directory not found in workspace');
+            vscode.window.showErrorMessage('server/ directory not found in extension project');
             return;
         }
         

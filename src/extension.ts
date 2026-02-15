@@ -32,6 +32,7 @@ let emulatorManager: EmulatorManager | undefined;
 let variantManager: VariantManager | undefined;
 let runStatusBarItem: vscode.StatusBarItem;
 let logger: Logger;
+let gradleLintFallbackInitialized = false;
 
 export function activate(context: vscode.ExtensionContext) {
     // Initialize centralized logger
@@ -63,6 +64,10 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(appLauncher);
 
     adbWirelessManager = new AdbWirelessManager(outputChannel, deviceManager.getAdbPath());
+
+    // Keep Gradle lint active as a fallback while ALS lint parity is in progress.
+    // This guarantees Kotlin/Java/XML lint diagnostics even when the server is running.
+    initGradleLintFallback(context);
 
     // Initialize Android Explorer View
     androidExplorerView = new AndroidExplorerView(deviceManager, logcatManager, gradleProcessManager, context);
@@ -154,7 +159,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 // ── Helper: Gradle-based lint fallback ────────────────────────────
 function initGradleLintFallback(context: vscode.ExtensionContext) {
+    if (gradleLintFallbackInitialized) {
+        return;
+    }
+
     lintManager = new LintManager(diagnosticProvider, gradleProcessManager, logger.getOutputChannel());
+    gradleLintFallbackInitialized = true;
 
     // Listen to file open events
     context.subscriptions.push(

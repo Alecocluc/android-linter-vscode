@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
+import * as fs from 'fs';
 import { CONFIG_NAMESPACE, CONFIG_KEYS } from './constants';
 import { Logger } from './logger';
 
@@ -194,7 +195,8 @@ export class AndroidDeviceManager implements vscode.Disposable {
 
     public getAdbPath(): string {
         const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
-        let adbPath = (config.get<string>(CONFIG_KEYS.ADB_PATH) || 'adb').trim();
+        const configuredPath = (config.get<string>(CONFIG_KEYS.ADB_PATH) || '').trim();
+        let adbPath = configuredPath || 'adb';
 
         const hasPathSeparator = adbPath.startsWith('./') || adbPath.includes('/') || adbPath.includes('\\');
 
@@ -203,6 +205,30 @@ export class AndroidDeviceManager implements vscode.Disposable {
             if (workspaceFolder) {
                 adbPath = adbPath.replace(/^\.\//, '');
                 adbPath = path.join(workspaceFolder.uri.fsPath, adbPath);
+            }
+        }
+
+        if (configuredPath && path.isAbsolute(adbPath)) {
+            return adbPath;
+        }
+
+        const sdkRoot = process.env.ANDROID_SDK_ROOT || process.env.ANDROID_HOME;
+        const adbBinary = process.platform === 'win32' ? 'adb.exe' : 'adb';
+
+        if (sdkRoot) {
+            const sdkAdb = path.join(sdkRoot, 'platform-tools', adbBinary);
+            if (sdkAdb && fs.existsSync(sdkAdb)) {
+                return sdkAdb;
+            }
+        }
+
+        if (process.platform === 'win32') {
+            const userHome = process.env.USERPROFILE;
+            if (userHome) {
+                const winDefaultAdb = path.join(userHome, 'AppData', 'Local', 'Android', 'Sdk', 'platform-tools', 'adb.exe');
+                if (fs.existsSync(winDefaultAdb)) {
+                    return winDefaultAdb;
+                }
             }
         }
 
